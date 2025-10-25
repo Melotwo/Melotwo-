@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Melotwo AI Safety Expert</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar styling */
+        .chat-container::-webkit-scrollbar { width: 6px; }
+        .chat-container::-webkit-scrollbar-thumb { background-color: #f7931e; border-radius: 3px; }
+        .chat-container::-webkit-scrollbar-track { background-color: #f0f0f0; }
+
+        /* Custom animation for loading dots */
+        @keyframes blink { 
+            0%, 100% { opacity: 0.2; }
+            20% { opacity: 1; }
+        }
+        .loading span:nth-child(1) { animation: blink 1.4s infinite; }
+        .loading span:nth-child(2) { animation: blink 1.4s infinite 0.2s; }
+        .loading span:nth-child(3) { animation: blink 1.4s infinite 0.4s; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4 font-sans">
+
+    <!-- Chat Interface Container -->
+    <div id="chat-widget" class="w-full max-w-sm h-[85vh] md:h-[700px] flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden">
+        
+        <!-- Chat Header -->
+        <div class="bg-blue-900 text-white p-4 flex items-center justify-between shadow-lg">
+            <div class="flex items-center">
+                <div class="w-2 h-2 rounded-full bg-green-400 mr-2 animate-pulse"></div>
+                <h1 class="text-xl font-bold">Melotwo Safety Expert (AI)</h1>
+            </div>
+            <span id="user-id-display" class="text-xs text-blue-300"></span>
+        </div>
+
+        <!-- Chat Messages Container -->
+        <div id="messages-container" class="flex-grow p-4 overflow-y-auto chat-container space-y-4">
+            <!-- Initial welcome message -->
+            <div class="flex justify-start">
+                <div class="bg-gray-200 text-gray-800 p-3 rounded-xl rounded-tl-none max-w-xs shadow-md">
+                    <p class="font-semibold text-sm">Welcome to Melotwo!</p>
+                    <p class="text-sm mt-1">I'm your AI Safety Expert. I can answer questions about certified PPE, compliance standards (SABS/ISO), and our partnership with Mine Africa Safety Solutions. How can I assist your operation today?</p>
+                </div>
+            </div>
+            <!-- Messages will be injected here -->
+        </div>
+
+        <!-- Chat Input Area -->
+        <div class="p-4 border-t border-gray-200 bg-gray-50">
+            <div id="loading-indicator" class="text-center text-sm text-gray-500 mb-2 hidden">
+                <span class="loading">
+                    <span>•</span><span>•</span><span>•</span>
+                </span> The expert is typing...
+            </div>
+            <div class="flex space-x-2">
+                <input type="text" id="user-input" placeholder="Ask a question about safety or procurement..."
+                       class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-150"
+                       onkeypress="if(event.key === 'Enter') document.getElementById('send-button').click()">
+                <button id="send-button"
+                        class="bg-blue-900 text-white p-3 rounded-lg shadow-md hover:bg-blue-800 transition duration-150 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.874L5.999 12zm0 0h7.5" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Initialization Status -->
+        <div id="status" class="text-center text-xs p-1 text-red-500 bg-red-50 hidden">Initializing...</div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, query, orderBy, addDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Set log level to debug for better console feedback
+        setLogLevel('Debug');
+
+        // Global Firebase configuration (MANDATORY variables provided by environment)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db, auth, userId = null;
+        let isAuthReady = false;
+        const MODEL_NAME = "gemini-2.5-flash-preview-09-2025";
+        const API_KEY = ""; // Using empty string, Canvas provides the key at runtime
+
+        const messagesContainer = document.getElementById('messages-container');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const statusDiv = document.getElementById('status');
+        const userIdDisplay = document.getElementById('user-id-display');
+
+        // --- Utility Functions ---
+
+        function setUIState(enabled) {
+            userInput.disabled = !enabled;
+            sendButton.disabled = !enabled;
+            loadingIndicator.classList.toggle('hidden', enabled);
+        }
+
+        function scrollToBottom() {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function displayMessage(message, sender, saved = true) {
+            const isUser = sender === 'user';
+            const messageElement = document.createElement('div');
+            messageElement.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
+            
+            const bubbleClass = isUser 
+                ? 'bg-blue-900 text-white p-3 rounded-xl rounded-br-none max-w-xs shadow-lg' 
+                : 'bg-gray-200 text-gray-800 p-3 rounded-xl rounded-tl-none max-w-xs shadow-md';
+            
+            messageElement.innerHTML = `
+                <div class="${bubbleClass}">
+                    <p class="text-sm">${message.replace(/\n/g, '<br>')}</p>
+                    ${!saved ? '<span class="text-xs text-gray-500 float-right mt-1">Sending...</span>' : ''}
+                </div>
+            `;
+            messagesContainer.appendChild(messageElement);
+            scrollToBottom();
+        }
+
+        // --- Firebase Initialization and Authentication ---
+
+        async function initializeFirebase() {
+            try {
+                if (Object.keys(firebaseConfig).length === 0) {
+                    console.error("Firebase config is missing. Cannot initialize Firestore.");
+                    statusDiv.textContent = "Error: Firebase configuration missing.";
+                    statusDiv.classList.remove('hidden');
+                    return;
+                }
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                statusDiv.textContent = "Authenticating...";
+                statusDiv.classList.remove('hidden');
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        userIdDisplay.textContent = `User ID: ${userId.substring(0, 8)}...`;
+                        isAuthReady = true;
+                        statusDiv.classList.add('hidden');
+                        
+                        // Start listening to chat history
+                        listenToChatHistory();
+                        setUIState(true);
+                    } else {
+                        // Attempt sign-in
+                        await authenticateUser();
+                    }
+                });
+            } catch (error) {
+                console.error("Error during Firebase initialization:", error);
+                statusDiv.textContent = `Error: Initialization failed (${error.message}).`;
+                statusDiv.classList.remove('hidden');
+            }
+        }
+
+        async function authenticateUser() {
+            try {
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                    console.log("Signed in with custom token.");
+                } else {
+                    await signInAnonymously(auth);
+                    console.log("Signed in anonymously.");
+                }
+            } catch (error) {
+                console.error("Authentication failed:", error);
+                statusDiv.textContent = `Error: Authentication failed (${error.message}).`;
+                statusDiv.classList.remove('hidden');
+            }
+        }
+
+        // --- Firestore Chat History Management ---
+
+        function getChatCollectionRef() {
+            // Private data path: /artifacts/{appId}/users/{userId}/chat_history
+            return collection(db, `artifacts/${appId}/users/${userId}/chat_history`);
+        }
+
+        function listenToChatHistory() {
+            if (!isAuthReady || !db) return;
+
+            const chatQuery = query(
+                getChatCollectionRef(),
+                orderBy('timestamp', 'asc')
+                // Note: orderBy is safe here for a small chat history, but typically needs an index.
+            );
+
+            // Clear static welcome message before listening
+            messagesContainer.innerHTML = '';
+            displayMessage("Welcome to Melotwo!", 'ai', true);
+
+            onSnapshot(chatQuery, (snapshot) => {
+                snapshot.docChanges().forEach((change) => {
+                    const data = change.doc.data();
+                    if (change.type === "added" && data.sender !== 'ai' && data.sender !== 'user') {
+                        // Initial welcome message is already displayed, process new messages
+                        // This uses a simple hack to only process messages that were just added
+                        displayMessage(data.text, data.sender, true);
+                    }
+                });
+            }, (error) => {
+                console.error("Error listening to chat history:", error);
+                statusDiv.textContent = "Error: Cannot load chat history.";
+                statusDiv.classList.remove('hidden');
+            });
+        }
+
+        async function saveMessage(sender, text) {
+            if (!isAuthReady || !db) {
+                console.error("Firestore not ready.");
+                return;
+            }
+            try {
+                await addDoc(getChatCollectionRef(), {
+                    sender: sender,
+                    text: text,
+                    timestamp: serverTimestamp()
+                });
+            } catch (error) {
+                console.error("Error saving message:", error);
+            }
+        }
+
+        // --- Gemini AI Interaction ---
+
+        async function generateAIResponse(userMessage) {
+            setUIState(false);
+            
+            // System instruction for Melotwo AI persona
+            const systemPrompt = "You are the Melotwo AI Safety Expert, assisting customers with inquiries about mine safety products, particularly those sourced from the Melotwo partner, Mine Africa Safety Solutions. Your tone must be highly professional and compliance-focused. Focus on certified solutions (SABS/ISO). If a user asks about bulk orders, pricing, or specific procurement, you must gently prompt them to leave their email address for a human specialist, stating that pricing is complex due to regional logistics, but continue to answer general safety questions directly.";
+
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+            
+            // Fetch past 5 messages from Firestore to provide context
+            const historyQuery = query(
+                getChatCollectionRef(),
+                orderBy('timestamp', 'desc')
+                // Note: Firebase security rules require an index for this query if not already defined
+            );
+            
+            const historySnapshot = await getDocs(historyQuery);
+            const chatHistory = historySnapshot.docs.slice(0, 5).map(doc => {
+                const data = doc.data();
+                return {
+                    role: data.sender === 'user' ? 'user' : 'model',
+                    parts: [{ text: data.text }]
+                };
+            }).reverse(); // Reverse to get chronological order
+
+            chatHistory.push({ role: "user", parts: [{ text: userMessage }] });
+
+            const payload = {
+                contents: chatHistory,
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+                // Add Google Search tool for grounded responses
+                tools: [{ "google_search": {} }],
+            };
+            
+            const MAX_RETRIES = 3;
+            let responseData = null;
+            
+            for (let i = 0; i < MAX_RETRIES; i++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        if (response.status === 429 && i < MAX_RETRIES - 1) {
+                             // Handle rate limiting with exponential backoff
+                            const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            continue; // Retry the request
+                        }
+                        throw new Error(`API call failed with status: ${response.status}`);
+                    }
+                    
+                    responseData = await response.json();
+                    break; // Success
+                } catch (error) {
+                    console.error(`Attempt ${i + 1} failed:`, error);
+                    if (i === MAX_RETRIES - 1) throw error; // Re-throw on last attempt
+                }
+            }
+            
+            if (responseData && responseData.candidates && responseData.candidates[0].content && responseData.candidates[0].content.parts) {
+                return responseData.candidates[0].content.parts[0].text;
+            } else {
+                return "I apologize, I encountered an issue accessing my knowledge base. Please try rephrasing your question or contact our human support team.";
+            }
+        }
+
+        // --- Main Logic & Event Listener ---
+
+        async function handleSendMessage() {
+            const message = userInput.value.trim();
+            if (message === '') return;
+
+            // 1. Display and save user message
+            userInput.value = '';
+            setUIState(false); 
+            displayMessage(message, 'user', false); 
+            await saveMessage('user', message);
+
+            try {
+                // 2. Generate and display AI response
+                const aiResponse = await generateAIResponse(message);
+                
+                // 3. Save AI response
+                await saveMessage('ai', aiResponse);
+                
+                // The onSnapshot listener handles displaying the saved message, 
+                // but for real-time feel, we might want to display immediately
+                // For simplicity/consistency with listener, we rely on onSnapshot to update the final view
+                
+            } catch (error) {
+                console.error("Error during AI interaction:", error);
+                displayMessage("A system error occurred. Please check your connection.", 'ai', true);
+            } finally {
+                setUIState(true);
+            }
+        }
+
+        // Attach event listener
+        sendButton.addEventListener('click', handleSendMessage);
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !sendButton.disabled) {
+                handleSendMessage();
+            }
+        });
+
+        // Initialize on load
+        window.onload = initializeFirebase;
+    </script>
+</body>
+</html>
