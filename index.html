@@ -1,11 +1,23 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <!-- ... (Metadata like viewport, titles, etc.) ... -->
-    <title>Melotwo</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/react-app/main.tsx"></script>
-  </body>
-</html>
+<script>
+    // Klaviyo tracking script for Melotwo
+    var kl = window.kl || [];
+    kl.init('U3wcsH', { // 1. Public API Key (Site ID)
+        list: '$default_list_id',
+        account: 'U3wcsH' // 2. Public API Key for account property
+    });
+    kl.identify();
+    
+    // Klaviyo Embed Script (Standard)
+    (function(){
+        if(window.klaviyo) return; 
+        var a=function(){this.pageLoadTime=(new Date).getTime();
+        this.pageLoadTime?this.loaded=true:this.loaded=false;}; 
+        a.prototype.push=function(b){(window.klaviyo||[]).push(b)}; 
+        window.klaviyo=new a;
+        var b=document.createElement("script");
+        b.type="text/javascript";
+        b.async=true;
+        b.src="https://static.klaviyo.com/onsite/js/klaviyo.js?v=1";
+        document.getElementsByTagName("head")[0].appendChild(b);
+    })();
+</script>
