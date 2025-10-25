@@ -21,3 +21,58 @@
         document.getElementsByTagName("head")[0].appendChild(b);
     })();
 </script>
+<!-- CHATBOT INTEGRATION -->
+<div id="chat-overlay" class="fixed inset-0 z-[100] hidden bg-black bg-opacity-70 transition-opacity duration-300 items-center justify-center p-4">
+    <!-- Chatbot Container (Modal) -->
+    <div class="relative w-full max-w-sm h-full max-h-[85vh] bg-white rounded-xl shadow-2xl overflow-hidden transform transition-transform duration-300 scale-95 opacity-0" id="chat-window">
+        <!-- Close Button -->
+        <button onclick="closeChat()" class="absolute top-2 right-2 p-2 rounded-full text-white bg-blue-900 hover:bg-red-600 transition z-[110]">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+        <!-- IFRAME loading the AI Chatbot page -->
+        <!-- Note: src must exactly match the file name you committed! -->
+        <iframe src="ai_chatbot.html" class="w-full h-full border-0"></iframe>
+    </div>
+</div>
+
+<!-- Floating Chat Bubble Button -->
+<button onclick="openChat()" class="fixed bottom-6 right-6 z-50 p-4 bg-blue-900 text-white rounded-full shadow-xl hover:bg-blue-800 transition duration-300 animate-bounce">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-8 h-8">
+        <!-- Chat icon from Lucide -->
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM12 21a9 9 0 100-18 9 9 0 000 18zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 15L12 18 9 15" />
+    </svg>
+</button>
+
+<!-- Chat Modal Toggle Logic (Must be placed after the elements) -->
+<script>
+    function openChat() {
+        const overlay = document.getElementById('chat-overlay');
+        const windowElement = document.getElementById('chat-window');
+        overlay.classList.remove('hidden');
+        overlay.classList.add('flex');
+        
+        // Timeout to allow the CSS transition to happen after display:flex
+        setTimeout(() => {
+            windowElement.classList.remove('opacity-0', 'scale-95');
+            windowElement.classList.add('opacity-100', 'scale-100');
+        }, 10);
+    }
+
+    function closeChat() {
+        const overlay = document.getElementById('chat-overlay');
+        const windowElement = document.getElementById('chat-window');
+        
+        windowElement.classList.remove('opacity-100', 'scale-100');
+        windowElement.classList.add('opacity-0', 'scale-95');
+
+        // Wait for the CSS transition to complete (300ms) before hiding
+        setTimeout(() => {
+            overlay.classList.add('hidden');
+            overlay.classList.remove('flex');
+        }, 300);
+    }
+</script>
+<!-- END CHATBOT INTEGRATION -->
