@@ -1,18 +1,201 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App.tsx';
-// NOTE: In a real project, you would import global CSS/Tailwind here, but we'll use inline Tailwind classes.
+import React, { useState } from 'react';
 
-// Check if the root element exists before trying to render
-const rootElement = document.getElementById('root');
+// NOTE: Tailwind CSS classes are assumed to be available globally.
 
-if (rootElement) {
-  ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>,
-  );
-} else {
-  console.error("Failed to find the root element in the document.");
-}
+const App = () => {
+    const [activeSection, setActiveSection] = useState('home');
 
+    // Function to open the AI chat window (integrated from previous step)
+    const openChat = () => {
+        const url = '/ai_chatbot.html';
+        const name = 'MelotwoAIChatbot';
+        // Define window size for a mobile-friendly pop-up
+        const specs = 'width=400,height=600,resizable=yes,scrollbars=yes,status=yes';
+        
+        window.open(url, name, specs);
+    };
+
+    const scrollToSection = (sectionId: string) => {
+        const section = document.getElementById(sectionId);
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth' });
+            setActiveSection(sectionId);
+        }
+    };
+
+    // Mock data for services
+    const services = [
+        { title: 'SABS/ISO Certified Gear', description: 'Access quality personal protective equipment (PPE) that meets stringent South African and international standards, ensuring legal compliance and maximum worker safety.', icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+        )},
+        { title: 'Tailored Bulk Procurement', description: 'Streamlined purchasing process for high-volume orders. We handle logistics, quality checks, and delivery, reducing procurement time and cost.', icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.72a2 2 0 0 0 2-1.58L23 6H6"/></svg>
+        )},
+        { title: 'Consultative Safety Audits', description: 'Expert advice to identify gaps in your current safety protocols and equipment usage, ensuring proactive risk mitigation specific to African mining environments.', icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 10a4 4 0 0 0-3.23 1.5c-1-.36-1.93-.82-2.77-1.5-1.57-1.33-2.61-3.2-2.3-4.59a4 4 0 0 0-4-4"/><path d="M12 2v20"/><path d="M16.5 10a4 4 0 0 1 3.23 1.5c1-.36 1.93-.82 2.77-1.5 1.57-1.33 2.61-3.2 2.3-4.59a4 4 0 0 1-4-4"/></svg>
+        )},
+    ];
+
+    return (
+        <div className="min-h-screen bg-gray-50 font-sans antialiased text-gray-800">
+            {/* Header / Navigation */}
+            <header className="fixed top-0 left-0 right-0 z-40 bg-white shadow-md">
+                <nav className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+                    <div className="flex items-center space-x-2 cursor-pointer" onClick={() => scrollToSection('home')}>
+                        <span className="text-3xl font-extrabold text-red-600">M</span>
+                        <span className="text-xl font-bold tracking-widest text-gray-800 hidden sm:block">MELOTWO</span>
+                    </div>
+                    <div className="flex space-x-6">
+                        {['home', 'services', 'partnership', 'contact'].map(section => (
+                            <button
+                                key={section}
+                                onClick={() => scrollToSection(section)}
+                                className={`text-sm font-medium uppercase transition duration-150 ease-in-out pb-1 
+                                    ${activeSection === section ? 'text-red-600 border-b-2 border-red-600' : 'text-gray-600 hover:text-red-600 hover:border-b-2 hover:border-red-300'}`}
+                            >
+                                {section.charAt(0).toUpperCase() + section.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+                </nav>
+            </header>
+
+            <main className="pt-20">
+                {/* 1. Hero Section */}
+                <section id="home" className="relative h-screen flex items-center bg-gray-100/50 overflow-hidden">
+                    <div className="absolute inset-0 z-0 opacity-10 bg-cover bg-center" 
+                         style={{ backgroundImage: "url('https://placehold.co/1200x800/222222/FFFFFF?text=Mining+Safety')" }}>
+                    </div>
+                    <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10 py-16">
+                        <div className="max-w-3xl">
+                            <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold leading-tight text-gray-900 drop-shadow-md">
+                                Safety is not a cost. <span className="text-red-600">It is an investment.</span>
+                            </h1>
+                            <p className="mt-6 text-xl text-gray-600 max-w-lg">
+                                Melotwo specializes in the procurement of SABS and ISO-certified personal protective equipment (PPE) for the African mining sector.
+                            </p>
+                            <button 
+                                onClick={() => scrollToSection('partnership')}
+                                className="mt-8 px-8 py-3 bg-red-600 text-white text-lg font-semibold rounded-lg shadow-xl hover:bg-red-700 transition duration-300 transform hover:scale-105"
+                            >
+                                View Our Certified Catalog
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                {/* 2. Services Section */}
+                <section id="services" className="py-20 bg-white">
+                    <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+                        <h2 className="text-4xl font-bold text-center text-gray-900 mb-4">Our Core Value Proposition</h2>
+                        <p className="text-xl text-center text-gray-500 max-w-3xl mx-auto mb-16">
+                            We solve the complex challenge of securing high-quality, fully compliant safety gear for high-risk industrial operations.
+                        </p>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+                            {services.map((service, index) => (
+                                <div key={index} className="bg-gray-50 p-8 rounded-xl shadow-lg border-t-4 border-red-500 hover:shadow-xl transition duration-300">
+                                    <div className="text-red-600 mb-4 h-12 w-12 flex items-center justify-center rounded-full bg-red-100">
+                                        {service.icon}
+                                    </div>
+                                    <h3 className="text-2xl font-semibold text-gray-900 mb-3">{service.title}</h3>
+                                    <p className="text-gray-600">{service.description}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+
+                {/* 3. Partnership Section (Lead Capture) */}
+                <section id="partnership" className="py-20 bg-gray-900 text-white">
+                    <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="text-center max-w-4xl mx-auto">
+                            <h2 className="text-4xl font-bold mb-4 text-red-400">Strategic Partnership: Mine Africa Safety Solutions</h2>
+                            <p className="text-xl mb-10 text-gray-300">
+                                We are proud to announce our exclusive partnership with **Mine Africa Safety Solutions**. This alliance ensures direct access to their entire compliant catalog, backed by our streamlined logistics.
+                            </p>
+
+                            <div className="bg-white p-8 md:p-12 rounded-xl shadow-2xl text-gray-800">
+                                <h3 className="text-3xl font-bold mb-4">Ready to Level Up Your Compliance?</h3>
+                                <p className="mb-6 text-gray-600">
+                                    Get instant access to the full Mine Africa catalog and a specialized B2B pricing sheet by joining our Safety Procurement Newsletter.
+                                </p>
+                                <form className="max-w-lg mx-auto space-y-4">
+                                    {/* NOTE: This form is a standard HTML form. Klaviyo is integrated via the script in index.html to capture leads. */}
+                                    <input 
+                                        type="email" 
+                                        placeholder="Enter your Work Email" 
+                                        required 
+                                        className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
+                                    />
+                                    <button 
+                                        type="submit" 
+                                        className="w-full px-5 py-3 bg-red-600 text-white text-lg font-semibold rounded-lg shadow-md hover:bg-red-700 transition duration-300"
+                                    >
+                                        Access Catalog & Pricing Now
+                                    </button>
+                                </form>
+                                <p className="mt-4 text-sm text-gray-500">
+                                    Your data is safe. We only send relevant safety compliance and pricing updates.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+                {/* 4. Contact Section */}
+                <section id="contact" className="py-20 bg-white">
+                    <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-3xl">
+                        <h2 className="text-4xl font-bold text-center text-gray-900 mb-4">Get In Touch for Bulk Orders</h2>
+                        <p className="text-xl text-center text-gray-500 mb-12">
+                            For customized quotes, large-volume procurement, or technical safety questions, reach out directly.
+                        </p>
+                        
+                        <div className="bg-gray-50 p-8 rounded-xl shadow-lg">
+                            <div className="space-y-4 text-lg">
+                                <p className="flex items-center space-x-3 text-gray-700">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-600 w-6 h-6"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="m22 6-10 7L2 6"/></svg>
+                                    <span>procurement@melotwo.com</span>
+                                </p>
+                                <p className="flex items-center space-x-3 text-gray-700">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-600 w-6 h-6"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6.86-6.86 19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 3.08 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                                    <span>+27 11 555 1234 (SA HQ)</span>
+                                </p>
+                                <p className="flex items-center space-x-3 text-gray-700">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-600 w-6 h-6"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                    <span>Johannesburg, South Africa</span>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
+
+            {/* Footer */}
+            <footer className="bg-gray-800 text-white py-8">
+                <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                    <p className="text-sm">
+                        &copy; {new Date().getFullYear()} Melotwo Safety Solutions. All rights reserved. | Strategic Partner of Mine Africa Safety Solutions.
+                    </p>
+                </div>
+            </footer>
+
+            {/* --- NEW FLOATING CHAT BUTTON --- */}
+            <button
+                onClick={openChat}
+                aria-label="Open AI Chatbot"
+                className="fixed bottom-6 right-6 z-50 p-4 rounded-full shadow-2xl transition-all duration-300
+                            bg-red-600 hover:bg-red-700 text-white transform hover:scale-105 active:scale-95
+                            flex items-center justify-center space-x-2 w-16 h-16 sm:w-20 sm:h-20"
+            >
+                {/* Chat Bubble Icon (Inline SVG) */}
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-message-square">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+            </button>
+            {/* ---------------------------------- */}
+        </div>
+    );
+};
+
+export default App;
