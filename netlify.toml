@@ -1,8 +1,10 @@
 [build]
-  # This command installs project dependencies and then executes the 'build' script 
-  # defined in your package.json, which is necessary to create the static website.
+  # We MUST explicitly set the node version to ensure dependencies are installed correctly
+  # This avoids compatibility errors during the 'npm run build' process.
+  environment = { NODE_VERSION = "18" }
+
+  # The build command is now standard: install, then run the build script
   command = "npm install && npm run build"
   
-  # This tells Netlify where to find the finished, compiled website files. 
-  # Vite (used in your React setup) outputs to the 'dist' folder.
+  # The publish directory remains 'dist' as defined by the vite.config.js/npm script
   publish = "dist"
