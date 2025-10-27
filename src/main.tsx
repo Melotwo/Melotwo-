@@ -64,7 +64,7 @@ const App = () => {
                 {/* 1. Hero Section */}
                 <section id="home" className="relative h-screen flex items-center bg-gray-100/50 overflow-hidden">
                     <div className="absolute inset-0 z-0 opacity-10 bg-cover bg-center" 
-                         style={{ backgroundImage: "url('https://placehold.co/1200x800/222222/FFFFFF?text=Mining+Safety')" }}>
+                         style={{ backgroundImage: "url('https://picsum.photos/1920/1080?random=1')" }}>
                     </div>
                     <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10 py-16">
                         <div className="max-w-3xl">
