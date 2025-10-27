@@ -1,8 +1,8 @@
 [build]
-  # Override the default React build command to simply install dependencies
-  # and skip the broken 'npm run build' step.
-  command = "npm install" 
+  # This command installs project dependencies and then executes the 'build' script 
+  # defined in your package.json, which is necessary to create the static website.
+  command = "npm install && npm run build"
   
-  # Tell Netlify that the files to be published are in the repository's root
-  # (where index.html and ai_chatbot.html live).
-  publish = "." 
+  # This tells Netlify where to find the finished, compiled website files. 
+  # Vite (used in your React setup) outputs to the 'dist' folder.
+  publish = "dist"
