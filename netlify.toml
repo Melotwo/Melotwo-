@@ -1,0 +1,8 @@
+[build]
+  # Override the default React build command to simply install dependencies
+  # and skip the broken 'npm run build' step.
+  command = "npm install" 
+  
+  # Tell Netlify that the files to be published are in the repository's root
+  # (where index.html and ai_chatbot.html live).
+  publish = "." 
