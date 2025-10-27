@@ -1,0 +1,11 @@
+{
+  "name": "melotwo-site",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "echo 'Skipping build step as files are already transpiled'"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}
