@@ -4,10 +4,22 @@ import React, { useState } from 'react';
 
 const App = () => {
     const [activeSection, setActiveSection] = useState('home');
+    const [email, setEmail] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    // FIX: Removed TypeScript generic type annotation to avoid HTML parse error on build
+    const [submissionStatus, setSubmissionStatus] = useState('idle'); 
+
+    // ********************************************************************************
+    // ** CRITICAL: REPLACE THESE PLACEHOLDERS WITH YOUR ACTUAL KLAVIYO CREDENTIALS **
+    // ********************************************************************************
+    const KLAVYO_LIST_ID = 'YOUR_KLAVIVO_LIST_ID'; 
+    const KLAVYO_ACCOUNT_ID = 'KLAVIVO_ACCOUNT_ID'; 
+    // ********************************************************************************
+
 
     // Function to open the AI chat window (integrated from previous step)
     const openChat = () => {
-        const url = '/ai_chatbot.html';
+        const url = 'ai_chatbot_app.html';
         const name = 'MelotwoAIChatbot';
         // Define window size for a mobile-friendly pop-up
         const specs = 'width=400,height=600,resizable=yes,scrollbars=yes,status=yes';
@@ -22,6 +34,79 @@ const App = () => {
             setActiveSection(sectionId);
         }
     };
+    
+    // Function to handle Klaviyo form submission
+    const handleKlaviyoSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        
+        if (!email || isSubmitting) return;
+        
+        if (KLAVYO_LIST_ID === 'YOUR_KLAVIVO_LIST_ID' || KLAVYO_ACCOUNT_ID === 'KLAVIVO_ACCOUNT_ID') {
+             console.error('ERROR: Klaviyo IDs are not set. Cannot submit form.');
+             setSubmissionStatus('error');
+             setTimeout(() => setSubmissionStatus('idle'), 5000);
+             return;
+        }
+
+        setIsSubmitting(true);
+        setSubmissionStatus('idle');
+
+        // Klaviyo Subscribe Endpoint (public API key is safe here)
+        const klaviyoEndpoint = `https://a.klaviyo.com/api/v1/list/${KLAVYO_LIST_ID}/subscribe`;
+        
+        // Data structure required by Klaviyo
+        const data = {
+            a: KLAVYO_ACCOUNT_ID, 
+            email: email,
+            $fields: ['$source'],
+            $source: 'Melotwo Website B2B Catalog CTA',
+        };
+
+        // Klaviyo requires the data to be in a querystring format
+        const queryString = new URLSearchParams(data as unknown as Record<string, string>).toString();
+        
+        const maxRetries = 3;
+        let currentRetry = 0;
+        
+        while (currentRetry < maxRetries) {
+            const delay = Math.pow(2, currentRetry) * 1000; // 1s, 2s, 4s
+            
+            if (currentRetry > 0) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+
+            try {
+                const response = await fetch(`${klaviyoEndpoint}?${queryString}`, {
+                    method: 'GET', // Klaviyo often uses GET requests for simple subscribe forms
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                if (response.ok) {
+                    setSubmissionStatus('success');
+                    setEmail('');
+                    break; // Success, exit retry loop
+                } else {
+                    currentRetry++;
+                    if (currentRetry >= maxRetries) {
+                         setSubmissionStatus('error');
+                    }
+                }
+            } catch (error) {
+                console.error('Klaviyo Submission Error:', error);
+                currentRetry++;
+                if (currentRetry >= maxRetries) {
+                    setSubmissionStatus('error');
+                }
+            }
+        }
+        
+        setIsSubmitting(false);
+        // Clear status after 5 seconds
+        setTimeout(() => setSubmissionStatus('idle'), 5000);
+    };
+
 
     // Mock data for services
     const services = [
@@ -120,21 +205,37 @@ const App = () => {
                                 <p className="mb-6 text-gray-600">
                                     Get instant access to the full Mine Africa catalog and a specialized B2B pricing sheet by joining our Safety Procurement Newsletter.
                                 </p>
-                                <form className="max-w-lg mx-auto space-y-4">
-                                    {/* NOTE: This form is a standard HTML form. Klaviyo is integrated via the script in index.html to capture leads. */}
+                                <form onSubmit={handleKlaviyoSubmit} className="max-w-lg mx-auto space-y-4">
+                                    {/* Klaviyo form implementation */}
                                     <input 
                                         type="email" 
                                         placeholder="Enter your Work Email" 
                                         required 
-                                        className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 text-gray-900"
+                                        disabled={isSubmitting || submissionStatus === 'success'}
                                     />
                                     <button 
                                         type="submit" 
-                                        className="w-full px-5 py-3 bg-red-600 text-white text-lg font-semibold rounded-lg shadow-md hover:bg-red-700 transition duration-300"
+                                        disabled={isSubmitting || submissionStatus === 'success'}
+                                        className="w-full px-5 py-3 bg-red-600 text-white text-lg font-semibold rounded-lg shadow-md hover:bg-red-700 transition duration-300 disabled:opacity-50"
                                     >
-                                        Access Catalog & Pricing Now
+                                        {isSubmitting ? 'Processing...' : 
+                                         submissionStatus === 'success' ? 'Success! Check Email' : 
+                                         'Access Catalog & Pricing Now'}
                                     </button>
                                 </form>
+                                {submissionStatus === 'success' && (
+                                    <p className="mt-4 text-md font-semibold text-green-600">
+                                        You're in! Check your email for the catalog link and pricing sheet.
+                                    </p>
+                                )}
+                                {submissionStatus === 'error' && (
+                                    <p className="mt-4 text-md font-semibold text-red-600">
+                                        Submission failed. Please try again or contact procurement. (Are the Klaviyo IDs set?)
+                                    </p>
+                                )}
                                 <p className="mt-4 text-sm text-gray-500">
                                     Your data is safe. We only send relevant safety compliance and pricing updates.
                                 </p>
@@ -155,11 +256,11 @@ const App = () => {
                             <div className="space-y-4 text-lg">
                                 <p className="flex items-center space-x-3 text-gray-700">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-600 w-6 h-6"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="m22 6-10 7L2 6"/></svg>
-                                    <span>procurement@melotwo.com</span>
+                                    <span>info@melotwo.com</span>
                                 </p>
                                 <p className="flex items-center space-x-3 text-gray-700">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-600 w-6 h-6"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6.86-6.86 19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 3.08 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                                    <span>+27 11 555 1234 (SA HQ)</span>
+                                    <span>+27 67 946 1487 (SA Procurement)</span>
                                 </p>
                                 <p className="flex items-center space-x-3 text-gray-700">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-600 w-6 h-6"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
