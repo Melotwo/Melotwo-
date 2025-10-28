@@ -3,11 +3,12 @@ import React, { useState } from 'react';
 // NOTE: Tailwind CSS classes are assumed to be available globally.
 
 const App = () => {
+    // State to manage the currently active navigation section for styling purposes.
     const [activeSection, setActiveSection] = useState('home');
+    
+    // State for the lead capture form.
     const [email, setEmail] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    
-    // State to manage form submission feedback
     const [submissionStatus, setSubmissionStatus] = useState('idle'); // 'idle' | 'loading' | 'success' | 'error'
 
     // ********************************************************************************
@@ -28,20 +29,22 @@ const App = () => {
         window.open(url, name, specs);
     };
 
+    // Smooth scroll and update active link state
     const scrollToSection = (sectionId: string) => {
         const section = document.getElementById(sectionId);
         if (section) {
             section.scrollIntoView({ behavior: 'smooth' });
-            setActiveSection(sectionId);
+            setActiveSection(sectionId); // Update state for active link styling
         }
     };
     
-    // Function to handle Klaviyo form submission
+    // Function to handle Klaviyo form submission with exponential backoff
     const handleKlaviyoSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         
         if (!email || isSubmitting) return;
         
+        // --- Validation for Placeholder IDs ---
         if (KLAVYO_LIST_ID === 'YOUR_KLAVIVO_LIST_ID' || KLAVYO_ACCOUNT_ID === 'KLAVIVO_ACCOUNT_ID') {
              console.error('ERROR: Klaviyo IDs are not set. Cannot submit form.');
              setSubmissionStatus('error');
@@ -52,10 +55,8 @@ const App = () => {
         setIsSubmitting(true);
         setSubmissionStatus('loading');
 
-        // Klaviyo Subscribe Endpoint (public API key is safe here)
         const klaviyoEndpoint = `https://a.klaviyo.com/api/v1/list/${KLAVYO_LIST_ID}/subscribe`;
         
-        // Data structure required by Klaviyo
         const data = {
             a: KLAVYO_ACCOUNT_ID, 
             email: email,
@@ -63,7 +64,6 @@ const App = () => {
             $source: 'Melotwo Website B2B Catalog CTA',
         };
 
-        // Klaviyo requires the data to be in a querystring format
         const queryString = new URLSearchParams(data as unknown as Record<string, string>).toString();
         
         const maxRetries = 3;
@@ -71,25 +71,23 @@ const App = () => {
         
         // Exponential backoff retry loop
         while (currentRetry < maxRetries) {
-            const delay = Math.pow(2, currentRetry) * 1000; // 1s, 2s, 4s
+            const delay = Math.pow(2, currentRetry) * 1000; 
             
             if (currentRetry > 0) {
                 await new Promise(resolve => setTimeout(resolve, delay));
             }
 
             try {
-                // Using GET request with querystring as per common Klaviyo embedded form practices
+                // Klaviyo uses a GET request with data in the querystring for client-side forms
                 const response = await fetch(`${klaviyoEndpoint}?${queryString}`, {
                     method: 'GET', 
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                 });
 
                 if (response.ok) {
                     setSubmissionStatus('success');
                     setEmail('');
-                    break; // Success, exit retry loop
+                    break; // Success
                 } else {
                     currentRetry++;
                     if (currentRetry >= maxRetries) {
@@ -97,7 +95,7 @@ const App = () => {
                     }
                 }
             } catch (error) {
-                // Network error or fetch issue
+                // Network error
                 currentRetry++;
                 if (currentRetry >= maxRetries) {
                     setSubmissionStatus('error');
@@ -106,7 +104,6 @@ const App = () => {
         }
         
         setIsSubmitting(false);
-        // Clear status after 5 seconds
         setTimeout(() => setSubmissionStatus('idle'), 5000);
     };
 
@@ -114,12 +111,15 @@ const App = () => {
     // Mock data for services
     const services = [
         { title: 'SABS/ISO Certified Gear', description: 'Access quality personal protective equipment (PPE) that meets stringent South African and international standards, ensuring legal compliance and maximum worker safety.', icon: (
+            // Safety Shield Icon
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
         )},
         { title: 'Tailored Bulk Procurement', description: 'Streamlined purchasing process for high-volume orders. We handle logistics, quality checks, and delivery, reducing procurement time and cost.', icon: (
+            // Shopping Cart Icon
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.72a2 2 0 0 0 2-1.58L23 6H6"/></svg>
         )},
         { title: 'Consultative Safety Audits', description: 'Expert advice to identify gaps in your current safety protocols and equipment usage, ensuring proactive risk mitigation specific to African mining environments.', icon: (
+            // Head with gear icon
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 10a4 4 0 0 0-3.23 1.5c-1-.36-1.93-.82-2.77-1.5-1.57-1.33-2.61-3.2-2.3-4.59a4 4 0 0 0-4-4"/><path d="M12 2v20"/><path d="M16.5 10a4 4 0 0 1 3.23 1.5c1-.36 1.93-.82 2.77-1.5 1.57-1.33 2.61-3.2 2.3-4.59a4 4 0 0 1-4-4"/></svg>
         )},
     ];
@@ -149,12 +149,11 @@ const App = () => {
             </header>
 
             <main className="pt-20">
-                {/* 1. Hero Section - OPTIMIZED FOR SPEED (Corrected Background) */}
+                {/* 1. Hero Section - FASTEST LOADING BACKGROUND */}
                 <section id="home" className="relative h-screen flex items-center bg-gray-100/50 overflow-hidden">
-                    {/* Fast-loading decorative gradient that replaces the slow external image. */}
+                    {/* Background: Simple, fast-loading, pure Tailwind gradient/color */}
                     <div className="absolute inset-0 z-0 bg-gradient-to-br from-red-50/70 to-white/70">
-                        {/* Adding a subtle overlay using a solid color instead of complex inline SVG to prevent compilation issues */}
-                        <div className="absolute inset-0 bg-red-100 mix-blend-multiply opacity-20"></div>
+                        <div className="absolute inset-0 bg-red-100 opacity-20"></div>
                     </div>
                     
                     <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10 py-16">
@@ -212,7 +211,6 @@ const App = () => {
                                     Get instant access to the full Mine Africa catalog and a specialized B2B pricing sheet by joining our Safety Procurement Newsletter.
                                 </p>
                                 <form onSubmit={handleKlaviyoSubmit} className="max-w-lg mx-auto space-y-4">
-                                    {/* Klaviyo form implementation */}
                                     <input 
                                         type="email" 
                                         placeholder="Enter your Work Email" 
