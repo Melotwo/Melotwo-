@@ -3,28 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Melotwo Safety Solutions</title>
-    <!-- Load Tailwind CSS via CDN for rapid styling -->
+    <title>Melotwo - Certified PPE for African Mining</title>
+    <!-- Load Tailwind CSS from CDN for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        /* Apply Inter font family and smooth scrolling */
+        /* Custom font import for a cleaner look */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
         body {
             font-family: 'Inter', sans-serif;
-            scroll-behavior: smooth;
+            margin: 0;
+            padding: 0;
         }
-        /* Fix to ensure sections take up the full screen height */
-        #home {
-            min-height: calc(100vh - 80px); /* Adjusting for fixed header height */
+        /* Custom scroll-margin for smooth scrolling offset by fixed header */
+        section {
+            scroll-margin-top: 5rem; 
         }
     </style>
 </head>
-<body>
+<body class="bg-gray-50">
     <!-- The root element where the React application will be mounted -->
-    <div id="root"></div>
-
-    <!-- The entry point script, which is crucial for the Vite/React setup -->
-    <!-- The 'module' type is necessary for importing and running the application logic -->
+    <div id="root">
+        <!-- Loading message while JavaScript loads -->
+        <div class="flex items-center justify-center min-h-screen">
+            <p class="text-xl text-gray-500">Loading Melotwo Application...</p>
+        </div>
+    </div>
+    
+    <!-- Load the main React entry point -->
+    <!-- The type="module" is essential for modern JS imports -->
     <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
