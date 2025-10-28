@@ -6,8 +6,9 @@ const App = () => {
     const [activeSection, setActiveSection] = useState('home');
     const [email, setEmail] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    // FIX: Removed TypeScript generic type annotation to avoid HTML parse error on build
-    const [submissionStatus, setSubmissionStatus] = useState('idle'); 
+    
+    // State to manage form submission feedback
+    const [submissionStatus, setSubmissionStatus] = useState('idle'); // 'idle' | 'loading' | 'success' | 'error'
 
     // ********************************************************************************
     // ** CRITICAL: REPLACE THESE PLACEHOLDERS WITH YOUR ACTUAL KLAVIYO CREDENTIALS **
@@ -17,7 +18,7 @@ const App = () => {
     // ********************************************************************************
 
 
-    // Function to open the AI chat window (integrated from previous step)
+    // Function to open the AI chat window (placeholder as requested previously)
     const openChat = () => {
         const url = 'ai_chatbot_app.html';
         const name = 'MelotwoAIChatbot';
@@ -49,7 +50,7 @@ const App = () => {
         }
 
         setIsSubmitting(true);
-        setSubmissionStatus('idle');
+        setSubmissionStatus('loading');
 
         // Klaviyo Subscribe Endpoint (public API key is safe here)
         const klaviyoEndpoint = `https://a.klaviyo.com/api/v1/list/${KLAVYO_LIST_ID}/subscribe`;
@@ -68,6 +69,7 @@ const App = () => {
         const maxRetries = 3;
         let currentRetry = 0;
         
+        // Exponential backoff retry loop
         while (currentRetry < maxRetries) {
             const delay = Math.pow(2, currentRetry) * 1000; // 1s, 2s, 4s
             
@@ -76,8 +78,9 @@ const App = () => {
             }
 
             try {
+                // Using GET request with querystring as per common Klaviyo embedded form practices
                 const response = await fetch(`${klaviyoEndpoint}?${queryString}`, {
-                    method: 'GET', // Klaviyo often uses GET requests for simple subscribe forms
+                    method: 'GET', 
                     headers: {
                         'Content-Type': 'application/json',
                     },
@@ -94,7 +97,7 @@ const App = () => {
                     }
                 }
             } catch (error) {
-                console.error('Klaviyo Submission Error:', error);
+                // Network error or fetch issue
                 currentRetry++;
                 if (currentRetry >= maxRetries) {
                     setSubmissionStatus('error');
@@ -146,18 +149,21 @@ const App = () => {
             </header>
 
             <main className="pt-20">
-                {/* 1. Hero Section */}
+                {/* 1. Hero Section - OPTIMIZED FOR SPEED (Corrected Background) */}
                 <section id="home" className="relative h-screen flex items-center bg-gray-100/50 overflow-hidden">
-                    <div className="absolute inset-0 z-0 opacity-10 bg-cover bg-center" 
-                         style={{ backgroundImage: "url('https://picsum.photos/1920/1080?random=1')" }}>
+                    {/* Fast-loading decorative gradient that replaces the slow external image. */}
+                    <div className="absolute inset-0 z-0 bg-gradient-to-br from-red-50/70 to-white/70">
+                        {/* Adding a subtle overlay using a solid color instead of complex inline SVG to prevent compilation issues */}
+                        <div className="absolute inset-0 bg-red-100 mix-blend-multiply opacity-20"></div>
                     </div>
+                    
                     <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10 py-16">
                         <div className="max-w-3xl">
                             <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold leading-tight text-gray-900 drop-shadow-md">
                                 Safety is not a cost. <span className="text-red-600">It is an investment.</span>
                             </h1>
                             <p className="mt-6 text-xl text-gray-600 max-w-lg">
-                                Melotwo specializes in the procurement of SABS and ISO-certified personal protective equipment (PPE) for the African mining sector.
+                                **Melotwo** specializes in the procurement of SABS and ISO-certified personal protective equipment (PPE) for the African mining sector.
                             </p>
                             <button 
                                 onClick={() => scrollToSection('partnership')}
@@ -214,14 +220,14 @@ const App = () => {
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
                                         className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 text-gray-900"
-                                        disabled={isSubmitting || submissionStatus === 'success'}
+                                        disabled={isSubmitting || submissionStatus === 'success' || submissionStatus === 'loading'}
                                     />
                                     <button 
                                         type="submit" 
-                                        disabled={isSubmitting || submissionStatus === 'success'}
+                                        disabled={isSubmitting || submissionStatus === 'success' || submissionStatus === 'loading'}
                                         className="w-full px-5 py-3 bg-red-600 text-white text-lg font-semibold rounded-lg shadow-md hover:bg-red-700 transition duration-300 disabled:opacity-50"
                                     >
-                                        {isSubmitting ? 'Processing...' : 
+                                        {submissionStatus === 'loading' ? 'Processing...' : 
                                          submissionStatus === 'success' ? 'Success! Check Email' : 
                                          'Access Catalog & Pricing Now'}
                                     </button>
@@ -281,7 +287,7 @@ const App = () => {
                 </div>
             </footer>
 
-            {/* --- NEW FLOATING CHAT BUTTON --- */}
+            {/* --- FLOATING CHAT BUTTON --- */}
             <button
                 onClick={openChat}
                 aria-label="Open AI Chatbot"
