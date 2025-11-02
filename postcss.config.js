@@ -1,12 +1,8 @@
-/**
- * PostCSS Configuration
- * Used by Vite during the build process to process CSS files.
- */
+/** @type {import('postcss-load-config').Config} */
 export default {
   plugins: {
-    // 1. Tailwind is run first to generate all utility classes
+    // These plugins are required for Tailwind CSS integration
     'tailwindcss': {},
-    // 2. Autoprefixer adds vendor prefixes (e.g., -webkit-) for browser compatibility
     'autoprefixer': {},
   },
 }
