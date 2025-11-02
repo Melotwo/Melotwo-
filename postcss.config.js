@@ -1,13 +1,13 @@
-// This uses ES Module syntax (import/export) to comply with "type": "module" in package.json.
-
-import tailwindcss from 'tailwindcss';
-import autoprefixer from 'autoprefixer';
-
-/** @type {import('postcss-load-config').Config} */
-export default {
-  // PostCSS typically expects plugins to be passed as an array of functions.
+/**
+ * @type {import('postcss-load-config').Config}
+ *
+ * NOTE: This file uses the .cjs extension to force CommonJS loading,
+ * which resolves the "plugins.forEach is not a function" error when
+ * package.json is set to "type": "module".
+ */
+module.exports = {
   plugins: [
-    tailwindcss,
-    autoprefixer,
+    require('tailwindcss'),
+    require('autoprefixer'),
   ],
 }
