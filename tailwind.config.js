@@ -1,14 +1,8 @@
-/** @type {import('tailwindcss').Config} */
+/** @type {import('postcss-load-config').Config} */
 export default {
-  // Specify which files Tailwind should scan for utility classes
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-    // If you have an HTML chatbot file, include it here
-    "./ai_chatbot.html", 
-  ],
-  theme: {
-    extend: {},
+  plugins: {
+    // These plugins are required for Tailwind CSS integration
+    'tailwindcss': {},
+    'autoprefixer': {},
   },
-  plugins: [],
 }
