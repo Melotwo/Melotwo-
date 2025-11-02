@@ -1,28 +1,47 @@
-{
-  "name": "melotwo-website",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
-  },
-  "devDependencies": {
-    "@types/react": "^18.2.66",
-    "@types/react-dom": "^18.2.22",
-    "@typescript-eslint/eslint-plugin": "^7.2.0",
-    "@typescript-eslint/parser": "^7.2.0",
-    "@vitejs/plugin-react": "^4.2.1",
-    "eslint": "^8.57.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.6",
-    "typescript": "^5.2.2",
-    "vite": "^5.2.0"
-  }
+function updateCartTotal() {
+    // 1. Get the main container for the cart items
+    var cartItemContainer = document.getElementsByClassName('cart-items')[0];
+
+    // Safety check: if the cart container doesn't exist, stop.
+    if (!cartItemContainer) {
+        console.error("Cart container element not found. Stopping updateCartTotal.");
+        return;
+    }
+
+    // 2. Get all individual cart rows
+    var cartRows = cartItemContainer.getElementsByClassName('cart-row');
+    var total = 0;
+
+    // 3. Loop through each row to calculate the total
+    for (var i = 0; i < cartRows.length; i++) {
+        var cartRow = cartRows[i];
+        
+        // Locate the price and quantity elements
+        var priceElement = cartRow.getElementsByClassName('cart-price')[0];
+        var quantityElement = cartRow.getElementsByClassName('cart-quantity-input')[0];
+
+        // *** THIS IS THE CRITICAL FIX: The check below prevents the "undefined" error ***
+        // Only calculate if BOTH the price element AND the quantity input element exist.
+        if (priceElement && quantityElement) {
+            // Get price text, remove '$', and convert to a number
+            var price = parseFloat(priceElement.innerText.replace('$', ''));
+            // Get the quantity value
+            var quantity = quantityElement.value;
+            
+            // Add to total
+            total = total + (price * parseFloat(quantity));
+        } else {
+            // If the element is missing, we skip the row instead of crashing.
+            console.warn("Skipping an incomplete cart row. Missing price or quantity element.");
+        }
+    }
+
+    // 4. Update the total price display
+    var totalElement = document.getElementsByClassName('cart-total-price')[0];
+    if (totalElement) {
+        // Round the total to two decimal places and format with '$'
+        totalElement.innerText = '$' + total.toFixed(2);
+    } else {
+         console.error("Cart total price display element not found.");
+    }
 }
