@@ -1,28 +1,33 @@
-{
-  "name": "melotwo-website",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint . --ext .ts,.tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
-  },
-  "devDependencies": {
-    "@types/react": "^18.2.66",
-    "@types/react-dom": "^18.2.22",
-    "@typescript-eslint/eslint-plugin": "^7.2.0",
-    "@typescript-eslint/parser": "^7.2.0",
-    "@vitejs/plugin-react": "^4.2.1",
-    "eslint": "^8.57.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.6",
-    "typescript": "^5.2.2",
-    "vite": "^5.2.0"
-  }
-}
+The error in your Netlify deploy log shows that the configuration file `/opt/build/repo/netlify.toml` has an issue:
+
+**Problem:** There's an unknown character "123" at row 1, column 2, position 1. This typically indicates an invisible character or encoding issue at the very beginning of your `netlify.toml` file.
+
+**Solutions to try:**
+
+1. **Check for BOM (Byte Order Mark):** Your `netlify.toml` file likely has a UTF-8 BOM character at the start. To fix:
+   - Open `netlify.toml` in your editor
+   - Delete the first line/character
+   - Re-type the content from scratch
+   - Save as UTF-8 without BOM
+
+2. **Recreate the file:** The safest approach is to:
+   - Delete your existing `netlify.toml`
+   - Create a new one from scratch
+   - Add your configuration
+
+3. **Basic Netlify config for Vite/React:** If you're starting fresh, here's a clean `netlify.toml`:
+
+```toml
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+```
+
+4. **Verify file encoding:** Make sure your editor is set to UTF-8 encoding without BOM when saving the file.
+
+Your `package.json` looks fine - the issue is specifically with the `netlify.toml` configuration file. Once you fix the encoding issue in that file, your deploy should proceed past the initialization stage.
