@@ -3,13 +3,13 @@
 <head>
     <title>The Generics | Store</title>
     <meta name="description" content="This is the Store Page">
-    <!-- CRITICAL FIX 1: ADDING VIEWPORT META TAG for responsiveness -->
+    <!-- CRITICAL: Ensures the page scales correctly on all devices (mobile first) -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
     
-    <!-- CRITICAL FIX 2: Link to the style.css file -->
+    <!-- Link to the style.css file -->
     <link rel="stylesheet" href="style.css" />
     
-    <!-- Link your script.js file -->
+    <!-- Link your script.js file. 'async' is good for deferring non-critical scripts. -->
     <script src="script.js" async></script>
 </head>
 <body>
@@ -72,7 +72,7 @@
             <!-- T-Shirt -->
             <div class="shop-item">
                 <span class="shop-item-title">T-Shirt</span>
-                <img class="shop-item-image" src="Images/Shirt.png">
+                <img class="shop-item-image" src="Images/Shirt.png" alt="The Generics Band T-Shirt">
                 <div class="shop-item-details">
                     <span class="shop-item-price">$19.99</span>
                     <button class="btn btn-primary shop-item-button" type="button">ADD TO CART</button>
@@ -81,7 +81,7 @@
             <!-- Coffee Cup -->
             <div class="shop-item">
                 <span class="shop-item-title">Coffee Cup</span>
-                <img class="shop-item-image" src="Images/Cofee.png">
+                <img class="shop-item-image" src="Images/Cofee.png" alt="The Generics Coffee Cup">
                 <div class="shop-item-details">
                     <span class="shop-item-price">$6.99</span>
                     <button class="btn btn-primary shop-item-button" type="button">ADD TO CART</button>
@@ -101,7 +101,7 @@
             <!-- CART ROW 1: Album 3 with FIXED PRICE -->
             <div class="cart-row">
                 <div class="cart-item cart-column">
-                    <img class="cart-item-image" src="Images/Album 3.png" width="100" height="100">
+                    <img class="cart-item-image" src="Images/Album 3.png" width="100" height="100" alt="Album 3">
                     <span class="cart-item-title">Album 3</span>
                 </div>
                 <span class="cart-price cart-column">$12.99</span>
@@ -114,7 +114,7 @@
             <!-- CART ROW 2: T-Shirt with FIXED PRICE -->
             <div class="cart-row">
                 <div class="cart-item cart-column">
-                    <img class="cart-item-image" src="Images/Shirt.png" width="100" height="100">
+                    <img class="cart-item-image" src="Images/Shirt.png" width="100" height="100" alt="T-Shirt">
                     <span class="cart-item-title">T-Shirt</span>
                 </div>
                 <span class="cart-price cart-column">$19.99</span>
@@ -137,18 +137,18 @@
             <h3 class="band-name">The Generics</h3>
             <ul class="nav footer-nav">
                 <li>
-                    <a href="https://www.youtube.com" target="_blank">
-                        <img src="Images/YouTube Logo.png">
+                    <a href="https://www.youtube.com" target="_blank" rel="noopener noreferrer">
+                        <img src="Images/YouTube Logo.png" alt="YouTube Logo">
                     </a>
                 </li>
                 <li>
-                    <a href="https://www.spotify.com" target="_blank">
-                        <img src="Images/Spotify Logo.png">
+                    <a href="https://www.spotify.com" target="_blank" rel="noopener noreferrer">
+                        <img src="Images/Spotify Logo.png" alt="Spotify Logo">
                     </a>
                 </li>
                 <li>
-                    <a href="https://www.facebook.com" target="_blank">
-                        <img src="Images/Facebook Logo.png">
+                    <a href="https://www.facebook.com" target="_blank" rel="noopener noreferrer">
+                        <img src="Images/Facebook Logo.png" alt="Facebook Logo">
                     </a>
                 </li>
             </ul>
