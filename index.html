@@ -3,7 +3,12 @@
 <head>
     <title>The Generics | Store</title>
     <meta name="description" content="This is the Store Page">
+    <!-- CRITICAL FIX 1: ADDING VIEWPORT META TAG for responsiveness -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+    
+    <!-- CRITICAL FIX 2: Link to the style.css file -->
     <link rel="stylesheet" href="style.css" />
+    
     <!-- Link your script.js file -->
     <script src="script.js" async></script>
 </head>
@@ -87,10 +92,10 @@
 
     <section class="container content-section">
         <h2 class="section-header">CART</h2>
-        <div class="cart-row">
-            <span class="cart-item cart-header cart-column">ITEM</span>
-            <span class="cart-price cart-header cart-column">PRICE</span>
-            <span class="cart-quantity cart-header cart-column">QUANTITY</span>
+        <div class="cart-row cart-header">
+            <span class="cart-item cart-column">ITEM</span>
+            <span class="cart-price cart-column">PRICE</span>
+            <span class="cart-quantity cart-column">QUANTITY</span>
         </div>
         <div class="cart-items">
             <!-- CART ROW 1: Album 3 with FIXED PRICE -->
