@@ -1,305 +1,247 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ShoppingCart, X, Plus, Minus, CreditCard } from 'lucide-react';
 
-// NOTE: Tailwind CSS classes are assumed to be available globally.
+// Define the product type
+interface Product {
+  id: number;
+  name: string;
+  price: number;
+  image: string;
+}
 
-const App = () => {
-    const [activeSection, setActiveSection] = useState('home');
-    const [email, setEmail] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    
-    // State to manage form submission feedback
-    const [submissionStatus, setSubmissionStatus] = useState('idle'); // 'idle' | 'loading' | 'success' | 'error'
+// Define the cart item type, which extends Product but includes quantity
+interface CartItem extends Product {
+  quantity: number;
+}
 
-    // ********************************************************************************
-    // ** CRITICAL: REPLACE THESE PLACEHOLDERS WITH YOUR ACTUAL KLAVIYO CREDENTIALS **
-    // ********************************************************************************
-    const KLAVYO_LIST_ID = 'YOUR_KLAVIVO_LIST_ID'; 
-    const KLAVYO_ACCOUNT_ID = 'KLAVIVO_ACCOUNT_ID'; 
-    // ********************************************************************************
+// Mock Product Data
+const PRODUCTS: Product[] = [
+  { id: 1, name: "Heavy Duty Gloves", price: 29.99, image: "https://placehold.co/128x128/333333/FFFFFF?text=GLOVE" },
+  { id: 2, name: "Safety Helmet (Type A)", price: 45.50, image: "https://placehold.co/128x128/333333/FFFFFF?text=HELMET" },
+  { id: 3, name: "Reflective Vest", price: 19.00, image: "https://placehold.co/128x128/333333/FFFFFF?text=VEST" },
+  { id: 4, name: "Steel Toe Boots", price: 99.75, image: "https://placehold.co/128x128/333333/FFFFFF?text=BOOTS" },
+];
 
+// Main App Component
+const App: React.FC = () => {
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [purchaseMessage, setPurchaseMessage] = useState<string | null>(null);
 
-    // Function to open the AI chat window (placeholder as requested previously)
-    const openChat = () => {
-        const url = 'ai_chatbot_app.html';
-        const name = 'MelotwoAIChatbot';
-        // Define window size for a mobile-friendly pop-up
-        const specs = 'width=400,height=600,resizable=yes,scrollbars=yes,status=yes';
-        
-        window.open(url, name, specs);
-    };
+  // Calculate Subtotal and Total Items
+  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const taxRate = 0.15; // Example 15% VAT/Sales Tax
+  const tax = subtotal * taxRate;
+  const total = subtotal + tax;
 
-    const scrollToSection = (sectionId: string) => {
-        const section = document.getElementById(sectionId);
-        if (section) {
-            section.scrollIntoView({ behavior: 'smooth' });
-            setActiveSection(sectionId);
+  // Function to add or increment item quantity in cart
+  const addToCart = useCallback((product: Product) => {
+    setCart(prevCart => {
+      const existingItem = prevCart.find(item => item.id === product.id);
+      if (existingItem) {
+        // Increment quantity if item exists
+        return prevCart.map(item =>
+          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        );
+      } else {
+        // Add new item if it doesn't exist
+        return [...prevCart, { ...product, quantity: 1 }];
+      }
+    });
+    // Clear any previous purchase message
+    setPurchaseMessage(null); 
+  }, []);
+
+  // Function to remove an item completely
+  const removeItem = useCallback((productId: number) => {
+    setCart(prevCart => prevCart.filter(item => item.id !== productId));
+  }, []);
+
+  // Function to update item quantity (for plus/minus buttons)
+  const updateQuantity = useCallback((productId: number, delta: 1 | -1) => {
+    setCart(prevCart => {
+      return prevCart.reduce((acc, item) => {
+        if (item.id === productId) {
+          const newQuantity = item.quantity + delta;
+          if (newQuantity > 0) {
+            acc.push({ ...item, quantity: newQuantity });
+          }
+          // If newQuantity is 0, we just filter it out by not pushing to acc.
+        } else {
+          acc.push(item);
         }
-    };
-    
-    // Function to handle Klaviyo form submission
-    const handleKlaviyoSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        
-        if (!email || isSubmitting) return;
-        
-        if (KLAVYO_LIST_ID === 'YOUR_KLAVIVO_LIST_ID' || KLAVYO_ACCOUNT_ID === 'KLAVIVO_ACCOUNT_ID') {
-             console.error('ERROR: Klaviyo IDs are not set. Cannot submit form.');
-             setSubmissionStatus('error');
-             setTimeout(() => setSubmissionStatus('idle'), 5000);
-             return;
-        }
+        return acc;
+      }, [] as CartItem[]);
+    });
+  }, []);
 
-        setIsSubmitting(true);
-        setSubmissionStatus('loading');
+  // Handle the final purchase action
+  const handlePurchase = () => {
+    if (cart.length === 0) {
+      setPurchaseMessage("Your cart is empty. Please add items before checking out.");
+      return;
+    }
 
-        // Klaviyo Subscribe Endpoint (public API key is safe here)
-        const klaviyoEndpoint = `https://a.klaviyo.com/api/v1/list/${KLAVYO_LIST_ID}/subscribe`;
-        
-        // Data structure required by Klaviyo
-        const data = {
-            a: KLAVYO_ACCOUNT_ID, 
-            email: email,
-            $fields: ['$source'],
-            $source: 'Melotwo Website B2B Catalog CTA',
-        };
+    // Simulate successful purchase and clear the cart
+    setPurchaseMessage(`Purchase successful! Your total was $${total.toFixed(2)}. ${totalItems} items are on their way.`);
+    setCart([]);
+  };
 
-        // Klaviyo requires the data to be in a querystring format
-        const queryString = new URLSearchParams(data as unknown as Record<string, string>).toString();
-        
-        const maxRetries = 3;
-        let currentRetry = 0;
-        
-        // Exponential backoff retry loop
-        while (currentRetry < maxRetries) {
-            const delay = Math.pow(2, currentRetry) * 1000; // 1s, 2s, 4s
-            
-            if (currentRetry > 0) {
-                await new Promise(resolve => setTimeout(resolve, delay));
-            }
+  // Component to render individual Product Cards
+  const ProductCard: React.FC<{ product: Product }> = ({ product }) => (
+    <div className="bg-white p-4 rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col items-center space-y-3">
+      <img src={product.image} alt={product.name} className="w-24 h-24 object-cover rounded-md border border-gray-100" />
+      <h3 className="text-lg font-semibold text-gray-800 text-center">{product.name}</h3>
+      <p className="text-xl font-bold text-green-600">${product.price.toFixed(2)}</p>
+      <button
+        onClick={() => addToCart(product)}
+        className="w-full py-2 px-4 bg-blue-600 text-white font-medium rounded-lg shadow-md hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center text-sm"
+      >
+        <Plus size={16} className="mr-2" /> Add to Cart
+      </button>
+    </div>
+  );
 
-            try {
-                // Using GET request with querystring as per common Klaviyo embedded form practices
-                const response = await fetch(`${klaviyoEndpoint}?${queryString}`, {
-                    method: 'GET', 
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                });
-
-                if (response.ok) {
-                    setSubmissionStatus('success');
-                    setEmail('');
-                    break; // Success, exit retry loop
-                } else {
-                    currentRetry++;
-                    if (currentRetry >= maxRetries) {
-                         setSubmissionStatus('error');
-                    }
-                }
-            } catch (error) {
-                // Network error or fetch issue
-                currentRetry++;
-                if (currentRetry >= maxRetries) {
-                    setSubmissionStatus('error');
-                }
-            }
-        }
-        
-        setIsSubmitting(false);
-        // Clear status after 5 seconds
-        setTimeout(() => setSubmissionStatus('idle'), 5000);
-    };
-
-
-    // Mock data for services
-    const services = [
-        { title: 'SABS/ISO Certified Gear', description: 'Access quality personal protective equipment (PPE) that meets stringent South African and international standards, ensuring legal compliance and maximum worker safety.', icon: (
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-        )},
-        { title: 'Tailored Bulk Procurement', description: 'Streamlined purchasing process for high-volume orders. We handle logistics, quality checks, and delivery, reducing procurement time and cost.', icon: (
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.72a2 2 0 0 0 2-1.58L23 6H6"/></svg>
-        )},
-        { title: 'Consultative Safety Audits', description: 'Expert advice to identify gaps in your current safety protocols and equipment usage, ensuring proactive risk mitigation specific to African mining environments.', icon: (
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 10a4 4 0 0 0-3.23 1.5c-1-.36-1.93-.82-2.77-1.5-1.57-1.33-2.61-3.2-2.3-4.59a4 4 0 0 0-4-4"/><path d="M12 2v20"/><path d="M16.5 10a4 4 0 0 1 3.23 1.5c1-.36 1.93-.82 2.77-1.5 1.57-1.33 2.61-3.2 2.3-4.59a4 4 0 0 1-4-4"/></svg>
-        )},
-    ];
-
-    return (
-        <div className="min-h-screen bg-gray-50 font-sans antialiased text-gray-800">
-            {/* Header / Navigation */}
-            <header className="fixed top-0 left-0 right-0 z-40 bg-white shadow-md">
-                <nav className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-                    <div className="flex items-center space-x-2 cursor-pointer" onClick={() => scrollToSection('home')}>
-                        <span className="text-3xl font-extrabold text-red-600">M</span>
-                        <span className="text-xl font-bold tracking-widest text-gray-800 hidden sm:block">MELOTWO</span>
-                    </div>
-                    <div className="flex space-x-6">
-                        {['home', 'services', 'partnership', 'contact'].map(section => (
-                            <button
-                                key={section}
-                                onClick={() => scrollToSection(section)}
-                                className={`text-sm font-medium uppercase transition duration-150 ease-in-out pb-1 
-                                    ${activeSection === section ? 'text-red-600 border-b-2 border-red-600' : 'text-gray-600 hover:text-red-600 hover:border-b-2 hover:border-red-300'}`}
-                            >
-                                {section.charAt(0).toUpperCase() + section.slice(1)}
-                            </button>
-                        ))}
-                    </div>
-                </nav>
-            </header>
-
-            <main className="pt-20">
-                {/* 1. Hero Section */}
-                <section id="home" className="relative h-screen flex items-center bg-gray-100/50 overflow-hidden">
-                    <div className="absolute inset-0 z-0 opacity-10 bg-cover bg-center" 
-                         style={{ backgroundImage: "url('https://picsum.photos/1920/1080?random=1')" }}>
-                    </div>
-                    <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10 py-16">
-                        <div className="max-w-3xl">
-                            <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold leading-tight text-gray-900 drop-shadow-md">
-                                Safety is not a cost. <span className="text-red-600">It is an investment.</span>
-                            </h1>
-                            <p className="mt-6 text-xl text-gray-600 max-w-lg">
-                                **Melotwo** specializes in the procurement of SABS and ISO-certified personal protective equipment (PPE) for the African mining sector.
-                            </p>
-                            <button 
-                                onClick={() => scrollToSection('partnership')}
-                                className="mt-8 px-8 py-3 bg-red-600 text-white text-lg font-semibold rounded-lg shadow-xl hover:bg-red-700 transition duration-300 transform hover:scale-105"
-                            >
-                                View Our Certified Catalog
-                            </button>
-                        </div>
-                    </div>
-                </section>
-
-                {/* 2. Services Section */}
-                <section id="services" className="py-20 bg-white">
-                    <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-                        <h2 className="text-4xl font-bold text-center text-gray-900 mb-4">Our Core Value Proposition</h2>
-                        <p className="text-xl text-center text-gray-500 max-w-3xl mx-auto mb-16">
-                            We solve the complex challenge of securing high-quality, fully compliant safety gear for high-risk industrial operations.
-                        </p>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-                            {services.map((service, index) => (
-                                <div key={index} className="bg-gray-50 p-8 rounded-xl shadow-lg border-t-4 border-red-500 hover:shadow-xl transition duration-300">
-                                    <div className="text-red-600 mb-4 h-12 w-12 flex items-center justify-center rounded-full bg-red-100">
-                                        {service.icon}
-                                    </div>
-                                    <h3 className="text-2xl font-semibold text-gray-900 mb-3">{service.title}</h3>
-                                    <p className="text-gray-600">{service.description}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </section>
-
-                {/* 3. Partnership Section (Lead Capture) */}
-                <section id="partnership" className="py-20 bg-gray-900 text-white">
-                    <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="text-center max-w-4xl mx-auto">
-                            <h2 className="text-4xl font-bold mb-4 text-red-400">Strategic Partnership: Mine Africa Safety Solutions</h2>
-                            <p className="text-xl mb-10 text-gray-300">
-                                We are proud to announce our exclusive partnership with **Mine Africa Safety Solutions**. This alliance ensures direct access to their entire compliant catalog, backed by our streamlined logistics.
-                            </p>
-
-                            <div className="bg-white p-8 md:p-12 rounded-xl shadow-2xl text-gray-800">
-                                <h3 className="text-3xl font-bold mb-4">Ready to Level Up Your Compliance?</h3>
-                                <p className="mb-6 text-gray-600">
-                                    Get instant access to the full Mine Africa catalog and a specialized B2B pricing sheet by joining our Safety Procurement Newsletter.
-                                </p>
-                                <form onSubmit={handleKlaviyoSubmit} className="max-w-lg mx-auto space-y-4">
-                                    {/* Klaviyo form implementation */}
-                                    <input 
-                                        type="email" 
-                                        placeholder="Enter your Work Email" 
-                                        required 
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 text-gray-900"
-                                        disabled={isSubmitting || submissionStatus === 'success' || submissionStatus === 'loading'}
-                                    />
-                                    <button 
-                                        type="submit" 
-                                        disabled={isSubmitting || submissionStatus === 'success' || submissionStatus === 'loading'}
-                                        className="w-full px-5 py-3 bg-red-600 text-white text-lg font-semibold rounded-lg shadow-md hover:bg-red-700 transition duration-300 disabled:opacity-50"
-                                    >
-                                        {submissionStatus === 'loading' ? 'Processing...' : 
-                                         submissionStatus === 'success' ? 'Success! Check Email' : 
-                                         'Access Catalog & Pricing Now'}
-                                    </button>
-                                </form>
-                                {submissionStatus === 'success' && (
-                                    <p className="mt-4 text-md font-semibold text-green-600">
-                                        You're in! Check your email for the catalog link and pricing sheet.
-                                    </p>
-                                )}
-                                {submissionStatus === 'error' && (
-                                    <p className="mt-4 text-md font-semibold text-red-600">
-                                        Submission failed. Please try again or contact procurement. (Are the Klaviyo IDs set?)
-                                    </p>
-                                )}
-                                <p className="mt-4 text-sm text-gray-500">
-                                    Your data is safe. We only send relevant safety compliance and pricing updates.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-                
-                {/* 4. Contact Section */}
-                <section id="contact" className="py-20 bg-white">
-                    <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-3xl">
-                        <h2 className="text-4xl font-bold text-center text-gray-900 mb-4">Get In Touch for Bulk Orders</h2>
-                        <p className="text-xl text-center text-gray-500 mb-12">
-                            For customized quotes, large-volume procurement, or technical safety questions, reach out directly.
-                        </p>
-                        
-                        <div className="bg-gray-50 p-8 rounded-xl shadow-lg">
-                            <div className="space-y-4 text-lg">
-                                <p className="flex items-center space-x-3 text-gray-700">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-600 w-6 h-6"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="m22 6-10 7L2 6"/></svg>
-                                    <span>info@melotwo.com</span>
-                                </p>
-                                <p className="flex items-center space-x-3 text-gray-700">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-600 w-6 h-6"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6.86-6.86 19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 3.08 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                                    <span>+27 67 946 1487 (SA Procurement)</span>
-                                </p>
-                                <p className="flex items-center space-x-3 text-gray-700">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-600 w-6 h-6"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                                    <span>Johannesburg, South Africa</span>
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-            </main>
-
-            {/* Footer */}
-            <footer className="bg-gray-800 text-white py-8">
-                <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                    <p className="text-sm">
-                        &copy; {new Date().getFullYear()} Melotwo Safety Solutions. All rights reserved. | Strategic Partner of Mine Africa Safety Solutions.
-                    </p>
-                </div>
-            </footer>
-
-            {/* --- NEW FLOATING CHAT BUTTON --- */}
-            <button
-                onClick={openChat}
-                aria-label="Open AI Chatbot"
-                className="fixed bottom-6 right-6 z-50 p-4 rounded-full shadow-2xl transition-all duration-300
-                            bg-red-600 hover:bg-red-700 text-white transform hover:scale-105 active:scale-95
-                            flex items-center justify-center space-x-2 w-16 h-16 sm:w-20 sm:h-20"
-            >
-                {/* Chat Bubble Icon (Inline SVG) */}
-                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-message-square">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                </svg>
-            </button>
-            {/* ---------------------------------- */}
+  // Component to render individual Cart Rows
+  const CartRow: React.FC<{ item: CartItem }> = ({ item }) => (
+    <div className="flex items-center justify-between py-3 border-b border-gray-200 last:border-b-0">
+      <div className="flex items-start space-x-3 w-3/5">
+        <img src={item.image} alt={item.name} className="w-12 h-12 object-cover rounded-md" />
+        <div className="flex flex-col">
+          <span className="font-medium text-gray-800 line-clamp-2">{item.name}</span>
+          <span className="text-sm text-gray-500">${item.price.toFixed(2)} each</span>
         </div>
-    );
+      </div>
+
+      <div className="flex items-center space-x-2 w-2/5 justify-end">
+        {/* Quantity Controls */}
+        <div className="flex items-center border border-gray-300 rounded-lg">
+          <button
+            onClick={() => updateQuantity(item.id, -1)}
+            className="p-1 text-gray-600 hover:bg-gray-100 rounded-l-lg transition-colors duration-100"
+            aria-label={`Decrease quantity of ${item.name}`}
+          >
+            <Minus size={16} />
+          </button>
+          <span className="px-2 w-8 text-center text-sm font-semibold">{item.quantity}</span>
+          <button
+            onClick={() => updateQuantity(item.id, 1)}
+            className="p-1 text-gray-600 hover:bg-gray-100 rounded-r-lg transition-colors duration-100"
+            aria-label={`Increase quantity of ${item.name}`}
+          >
+            <Plus size={16} />
+          </button>
+        </div>
+
+        {/* Subtotal and Remove Button */}
+        <div className="flex items-center space-x-2 ml-4">
+          <span className="font-bold text-base text-gray-900 w-16 text-right">${(item.price * item.quantity).toFixed(2)}</span>
+          <button
+            onClick={() => removeItem(item.id)}
+            className="p-1 text-red-500 hover:bg-red-50 rounded-full transition-colors duration-100"
+            aria-label={`Remove ${item.name} from cart`}
+          >
+            <X size={18} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans">
+      
+      {/* Header */}
+      <header className="sticky top-0 bg-white shadow-md z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+            PPE Store
+          </h1>
+          <div className="flex items-center space-x-4">
+            <span className="relative">
+              <ShoppingCart className="text-gray-600" size={24} />
+              {totalItems > 0 && (
+                <span className="absolute -top-2 -right-2 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                  {totalItems}
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="lg:grid lg:grid-cols-3 lg:gap-10">
+          
+          {/* Product Grid (2/3 width on desktop) */}
+          <section className="lg:col-span-2 space-y-8">
+            <h2 className="text-3xl font-bold text-gray-800 border-b pb-2 mb-4">Safety Products</h2>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+              {PRODUCTS.map(product => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          </section>
+
+          {/* Shopping Cart Sidebar (1/3 width on desktop) */}
+          <aside className="lg:col-span-1 mt-10 lg:mt-0 sticky top-20">
+            <div className="bg-white p-6 rounded-2xl shadow-2xl border border-gray-100 space-y-6">
+              
+              <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                <ShoppingCart size={24} className="mr-2 text-blue-600" />
+                Shopping Cart ({totalItems})
+              </h2>
+
+              {/* Purchase Message */}
+              {purchaseMessage && (
+                <div className={`p-3 rounded-lg text-sm font-medium ${cart.length === 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                  {purchaseMessage}
+                </div>
+              )}
+
+              {/* Cart Items List */}
+              <div className="divide-y divide-gray-100">
+                {cart.length === 0 ? (
+                  <p className="text-gray-500 py-4 text-center">Your cart is empty.</p>
+                ) : (
+                  cart.map(item => <CartRow key={item.id} item={item} />)
+                )}
+              </div>
+
+              {/* Summary and Checkout */}
+              <div className="pt-4 border-t border-gray-200 space-y-3">
+                <div className="flex justify-between font-medium text-gray-700">
+                  <span>Subtotal:</span>
+                  <span>${subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-medium text-gray-700">
+                  <span>Tax ({(taxRate * 100).toFixed(0)}%):</span>
+                  <span>${tax.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-extrabold text-xl text-gray-900 pt-2 border-t border-gray-300">
+                  <span>Order Total:</span>
+                  <span>${total.toFixed(2)}</span>
+                </div>
+
+                <button
+                  onClick={handlePurchase}
+                  disabled={cart.length === 0}
+                  className="w-full py-3 mt-4 bg-green-600 text-white font-semibold rounded-xl shadow-lg hover:bg-green-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                >
+                  <CreditCard size={20} />
+                  <span>Proceed to Checkout</span>
+                </button>
+              </div>
+
+            </div>
+          </aside>
+        </div>
+      </main>
+
+    </div>
+  );
 };
 
 export default App;
