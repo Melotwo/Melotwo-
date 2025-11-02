@@ -1,20 +1,14 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  // CRITICAL: Content array specifies every file that Tailwind should scan
-  // for class names. It MUST include all your React components and your index.html.
+  // Specify which files Tailwind should scan for utility classes
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
+    // If you have an HTML chatbot file, include it here
+    "./ai_chatbot.html", 
   ],
   theme: {
-    // You can customize fonts, colors, and more here.
-    // For now, we'll keep the default Tailwind theme.
-    extend: {
-      // Example of adding a custom primary color:
-      // colors: {
-      //   'melotwo-primary': '#0A4C80', 
-      // },
-    },
+    extend: {},
   },
   plugins: [],
 }
