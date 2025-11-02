@@ -1,198 +1,322 @@
-// Use a listener to run the setup function once the page is fully loaded
-if (document.readyState == 'loading') {
-    document.addEventListener('DOMContentLoaded', ready)
-} else {
-    ready()
+/* * The Generics Store Page Styles
+ * This CSS file ensures the layout is clean, responsive, and visually appealing.
+ */
+
+/* 1. Global Reset and Base Styles */
+* {
+    box-sizing: border-box;
+    font-family: sans-serif;
+    color: #555;
+    margin: 0;
+    padding: 0;
 }
 
-// Main setup function to initialize event listeners
-function ready() {
-    // 1. Setup 'REMOVE' button listeners (for existing items)
-    var removeCartItemButtons = document.getElementsByClassName('btn-danger')
-    for (var i = 0; i < removeCartItemButtons.length; i++) {
-        var button = removeCartItemButtons[i]
-        button.addEventListener('click', removeCartItem)
-    }
-
-    // 2. Setup 'QUANTITY CHANGE' listeners (for existing items)
-    var quantityInputs = document.getElementsByClassName('cart-quantity-input')
-    for (var i = 0; i < quantityInputs.length; i++) {
-        var input = quantityInputs[i]
-        input.addEventListener('change', quantityChanged)
-    }
-
-    // 3. Setup 'ADD TO CART' button listeners (for ALL shop items)
-    var addToCartButtons = document.getElementsByClassName('shop-item-button')
-    for (var i = 0; i < addToCartButtons.length; i++) {
-        var button = addToCartButtons[i]
-        button.addEventListener('click', addToCartClicked)
-    }
-
-    // 4. Setup 'PURCHASE' button listener
-    document.getElementsByClassName('btn-purchase')[0].addEventListener('click', purchaseClicked)
-
-    // Calculate initial total with the new prices you added to the HTML
-    updateCartTotal()
+html, body {
+    min-height: 100%;
 }
 
-// --- Event Handlers ---
-
-function purchaseClicked() {
-    const message = "Thank you for your purchase!";
-    const cartItems = document.getElementsByClassName('cart-items')[0];
-    
-    if (cartItems.children.length === 0) {
-        showCustomMessage("Your cart is empty. Please add items before purchasing!", 'red');
-        return;
-    }
-    
-    // Clear the cart items
-    while (cartItems.hasChildNodes()) {
-        cartItems.removeChild(cartItems.firstChild);
-    }
-    
-    // Update the total to 0.00
-    updateCartTotal(); 
-    showCustomMessage(message, 'green');
+body {
+    background-color: #EDECEB; /* Light background for contrast */
 }
 
-function removeCartItem(event) {
-    var buttonClicked = event.target
-    // Remove the parent row
-    buttonClicked.parentElement.parentElement.remove() 
-    // Recalculate the total
-    updateCartTotal()
+/* Base Container for content width */
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 15px;
 }
 
-function quantityChanged(event) {
-    var input = event.target
-    // Ensure input value is a valid number and greater than 0
-    if (isNaN(input.value) || input.value <= 0) {
-        input.value = 1
+/* 2. Header and Navigation */
+.main-header {
+    background-color: #333;
+    padding: 20px 0;
+}
+
+.band-name-large {
+    color: white;
+    font-size: 3.5em;
+    text-align: center;
+    margin: 10px 0;
+}
+
+.main-nav ul {
+    list-style: none;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.main-nav li {
+    margin: 0 15px;
+}
+
+.main-nav a {
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 1.1em;
+    padding: 5px;
+    transition: color 0.3s;
+}
+
+.main-nav a:hover {
+    color: #aaa;
+}
+
+/* 3. Section Headers and Content */
+.content-section {
+    margin: 30px 0;
+    padding: 20px;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.section-header {
+    font-size: 2.5em;
+    font-weight: normal;
+    text-align: center;
+    color: #333;
+    margin-bottom: 25px;
+    border-bottom: 2px solid #ccc;
+    padding-bottom: 10px;
+}
+
+/* 4. Shop Items (Grid Layout) */
+.shop-items {
+    display: grid;
+    /* Responsive grid: 1 column on small screens, 2 columns on larger screens */
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 30px;
+    justify-content: center;
+    padding: 10px;
+}
+
+.shop-item {
+    background-color: #f9f9f9;
+    padding: 15px;
+    border-radius: 6px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.shop-item-title {
+    display: block;
+    font-weight: bold;
+    font-size: 1.2em;
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.shop-item-image {
+    width: 100%;
+    max-width: 200px;
+    height: auto;
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.shop-item-details {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: auto; /* Push details to the bottom */
+}
+
+.shop-item-price {
+    font-size: 1.2em;
+    color: #4CAF50; /* Green for price */
+    font-weight: bold;
+}
+
+/* 5. Buttons */
+.btn {
+    text-align: center;
+    vertical-align: middle;
+    padding: 8px 16px;
+    cursor: pointer;
+    border: none;
+    border-radius: 4px;
+    font-weight: bold;
+    transition: background-color 0.3s, transform 0.1s;
+}
+
+.btn-primary {
+    color: white;
+    background-color: #007bff; /* Blue for primary action */
+}
+
+.btn-primary:hover {
+    background-color: #0056b3;
+}
+
+.btn-danger {
+    color: white;
+    background-color: #dc3545; /* Red for remove/danger action */
+    margin-left: 10px;
+}
+
+.btn-danger:hover {
+    background-color: #c82333;
+}
+
+.btn-purchase {
+    display: block;
+    margin: 40px auto 20px auto;
+    font-size: 1.5em;
+    padding: 12px 24px;
+    width: 80%;
+    max-width: 300px;
+}
+
+/* 6. Cart Section */
+.cart-header {
+    font-weight: bold;
+    font-size: 1.2em;
+    color: #333;
+    border-bottom: 1px solid #aaa;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.cart-row {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #ccc;
+    padding: 15px 0;
+}
+
+.cart-column {
+    display: flex;
+    align-items: center;
+    margin-right: 1.5em;
+}
+
+.cart-item {
+    width: 40%;
+}
+
+.cart-price {
+    width: 20%;
+}
+
+.cart-quantity {
+    width: 40%;
+}
+
+.cart-item-image {
+    width: 70px;
+    height: 70px;
+    border-radius: 4px;
+    margin-right: 15px;
+}
+
+.cart-item-title {
+    color: #333;
+    font-weight: 500;
+}
+
+.cart-quantity-input {
+    width: 45px;
+    height: 30px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    background-color: #eee;
+    padding: 0 5px;
+    text-align: center;
+    margin-right: 10px;
+}
+
+.cart-total {
+    text-align: right;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 2px solid #333;
+}
+
+.cart-total-title {
+    font-weight: bold;
+    font-size: 1.5em;
+    color: #333;
+    margin-right: 20px;
+}
+
+.cart-total-price {
+    font-size: 1.5em;
+    color: #4CAF50; 
+}
+
+/* 7. Footer */
+.main-footer {
+    background-color: #333;
+    color: white;
+    padding: 25px 0;
+    margin-top: 30px;
+}
+
+.main-footer-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.main-footer-container h3 {
+    color: white;
+    font-size: 2em;
+    margin-bottom: 15px;
+}
+
+.footer-nav {
+    display: flex;
+    padding: 0;
+}
+
+.footer-nav li {
+    margin: 0 10px;
+}
+
+.footer-nav img {
+    width: 30px;
+    height: 30px;
+    transition: transform 0.2s;
+}
+
+.footer-nav img:hover {
+    transform: scale(1.1);
+}
+
+/* 8. Media Queries for Responsiveness */
+@media (max-width: 600px) {
+    /* Adjust navigation for small screens */
+    .main-nav ul {
+        flex-direction: column;
+        align-items: center;
     }
-    // Recalculate the total
-    updateCartTotal()
-}
-
-function addToCartClicked(event) {
-    var button = event.target
-    var shopItem = button.parentElement.parentElement
-    var title = shopItem.getElementsByClassName('shop-item-title')[0].innerText
-    var price = shopItem.getElementsByClassName('shop-item-price')[0].innerText
-    var imageSrc = shopItem.getElementsByClassName('shop-item-image')[0].src
-    
-    // Call the function to add the item
-    addItemToCart(title, price, imageSrc)
-    
-    // Always update the total after modifying the cart
-    updateCartTotal()
-}
-
-function addItemToCart(title, price, imageSrc) {
-    var cartRow = document.createElement('div')
-    cartRow.classList.add('cart-row')
-    var cartItems = document.getElementsByClassName('cart-items')[0]
-    var cartItemNames = cartItems.getElementsByClassName('cart-item-title')
-
-    // Check if the item is already in the cart
-    for (var i = 0; i < cartItemNames.length; i++) {
-        if (cartItemNames[i].innerText === title) {
-            showCustomMessage(`This item (${title}) is already in your cart!`, 'orange');
-            return
-        }
+    .main-nav li {
+        margin: 5px 0;
     }
 
-    // Create the new cart item HTML structure
-    var cartRowContents = `
-        <div class="cart-item cart-column">
-            <img class="cart-item-image" src="${imageSrc}" width="100" height="100">
-            <span class="cart-item-title">${title}</span>
-        </div>
-        <span class="cart-price cart-column">${price}</span>
-        <div class="cart-quantity cart-column">
-            <input class="cart-quantity-input" type="number" value="1">
-            <button class="btn btn-danger" type="button">REMOVE</button>
-        </div>`
-        
-    cartRow.innerHTML = cartRowContents
-    cartItems.append(cartRow)
-
-    // IMPORTANT: Add event listeners to the NEWLY created elements
-    cartRow.getElementsByClassName('btn-danger')[0].addEventListener('click', removeCartItem)
-    cartRow.getElementsByClassName('cart-quantity-input')[0].addEventListener('change', quantityChanged)
-    
-    showCustomMessage(`Added "${title}" to your cart!`, 'green');
-}
-
-// --- Core Calculation Function ---
-
-function updateCartTotal() {
-    var cartItemContainer = document.getElementsByClassName('cart-items')[0]
-    var cartRows = cartItemContainer.getElementsByClassName('cart-row')
-    var total = 0
-    
-    for (var i = 0; i < cartRows.length; i++) {
-        var cartRow = cartRows[i]
-        var priceElement = cartRow.getElementsByClassName('cart-price')[0]
-        var quantityElement = cartRow.getElementsByClassName('cart-quantity-input')[0]
-
-        // 1. Get Price: Remove the '$' sign and convert to a floating point number
-        var price = parseFloat(priceElement.innerText.replace('$', ''))
-        
-        // 2. Get Quantity: Get the value from the input field
-        var quantity = quantityElement.value
-        
-        // 3. Calculate: Add the line item total to the running total
-        total = total + (price * quantity)
+    /* Stack cart columns on very small screens */
+    .cart-row {
+        flex-wrap: wrap;
     }
-
-    // Round the total to two decimal places
-    total = Math.round(total * 100) / 100
-    
-    // Update the total display in the HTML
-    document.getElementsByClassName('cart-total-price')[0].innerText = '$' + total.toFixed(2)
-}
-
-// --- Custom Message Box (Instead of Alert) ---
-
-function showCustomMessage(message, color) {
-    const container = document.body;
-    let messageBox = document.getElementById('custom-message');
-
-    if (!messageBox) {
-        messageBox = document.createElement('div');
-        messageBox.id = 'custom-message';
-        container.appendChild(messageBox);
+    .cart-item, .cart-price, .cart-quantity {
+        width: 100%;
+        margin-right: 0;
+        justify-content: center;
+        margin-bottom: 5px;
     }
-    
-    // Styling the message box
-    messageBox.style.cssText = `
-        position: fixed; 
-        top: 20px; 
-        right: 20px; 
-        padding: 15px 30px; 
-        border-radius: 8px; 
-        z-index: 1000; 
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        font-weight: bold;
-        transition: opacity 0.3s, transform 0.3s;
-        opacity: 0;
-        transform: translateX(100%);
-        color: white;
-        background-color: ${color === 'green' ? '#4CAF50' : color === 'red' ? '#F44336' : '#FF9800'};
-    `;
-    
-    messageBox.innerText = message;
-    
-    // Show the message
-    setTimeout(() => {
-        messageBox.style.opacity = '1';
-        messageBox.style.transform = 'translateX(0)';
-    }, 10);
-
-    // Hide the message after 3 seconds
-    setTimeout(() => {
-        messageBox.style.opacity = '0';
-        messageBox.style.transform = 'translateX(100%)';
-    }, 3000);
+    .cart-price {
+        order: -1; /* Move price to the top of the row on mobile */
+    }
+    .cart-item-image {
+        margin-left: 0;
+    }
+    .cart-total {
+        text-align: center;
+    }
 }
