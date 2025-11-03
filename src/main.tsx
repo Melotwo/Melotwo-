@@ -1,291 +1,385 @@
-import React, { useState, FormEvent } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { ShoppingCart, X, Plus, Minus, CreditCard, Loader, User } from 'lucide-react';
 
-// --- Constants ---
-const KLAVYO_LIST_ID = 'UpjtAE';
-const KLAVYO_ACCOUNT_ID = 'U3wcsH';
-const AFFILIATE_LINK = 'https://www.mineafricasafetysolutions.com/catalog?affiliate_id=pPuyfECz9SHZrRc3w6zFwfW2f5yYo8LiN2hys3dTZKlSJrY2ypA72w21manqCKOA';
-const currentYear = new Date().getFullYear();
+// Firebase Imports (using CDN style imports for single file environment)
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, onSnapshot, setDoc } from 'firebase/firestore';
+
+// Define the product type (for reference)
+// interface Product { id: number; name: string; price: number; image: string; }
+
+// Define the cart item type, which extends Product but includes quantity (for reference)
+// interface CartItem extends Product { quantity: number; }
+
+// Mock Product Data
+const PRODUCTS = [
+  { id: 1, name: "Heavy Duty Gloves", price: 29.99, image: "https://placehold.co/128x128/333333/FFFFFF?text=GLOVE" },
+  { id: 2, name: "Safety Helmet (Type A)", price: 45.50, image: "https://placehold.co/128x128/333333/FFFFFF?text=HELMET" },
+  { id: 3, name: "Reflective Vest", price: 19.00, image: "https://placehold.co/128x128/333333/FFFFFF?text=VEST" },
+  { id: 4, name: "Steel Toe Boots", price: 99.75, image: "https://placehold.co/128x128/333333/FFFFFF?text=BOOTS" },
+];
+
+// --- Firebase Setup and Utilities ---
+
+// Access global variables safely
+const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const FIREBASE_CONFIG = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const INITIAL_AUTH_TOKEN = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
 /**
- * Utility function for exponential backoff on fetch.
- * This is a standalone helper within the component to handle API calls robustly.
+ * Saves the current cart to Firestore.
+ * @param {object} db Firestore instance
+ * @param {string} userId Current user ID
+ * @param {Array<object>} currentCart The cart array to save
  */
-async function fetchWithRetry(url: string, options: RequestInit, retries = 3): Promise<Response> {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await fetch(url, options);
-            // Only retry on server errors (5xx)
-            if (response.status >= 500 && i < retries - 1) {
-                throw new Error(`Server error: ${response.status}`);
-            }
-            return response;
-        } catch (error) {
-            if (i < retries - 1) {
-                const delay = Math.pow(2, i) * 1000; // 1s, 2s, 4s delay
-                await new Promise(resolve => setTimeout(resolve, delay));
-            } else {
-                throw error;
-            }
-        }
+const saveCartToFirestore = async (db, userId, currentCart) => {
+  if (!db || !userId) return;
+  try {
+    // Path: /artifacts/{APP_ID}/users/{userId}/carts/mainCart
+    const cartRef = doc(db, 'artifacts', APP_ID, 'users', userId, 'carts', 'mainCart');
+    await setDoc(cartRef, { items: currentCart, lastUpdated: new Date() });
+    console.log("Cart saved to Firestore.");
+  } catch (error) {
+    console.error("Error writing document: ", error);
+  }
+};
+
+// Main App Component
+const App = () => {
+  const [db, setDb] = useState(null);
+  const [auth, setAuth] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [cart, setCart] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [purchaseMessage, setPurchaseMessage] = useState(null);
+
+  // 1. Initialize Firebase and Authenticate User
+  useEffect(() => {
+    if (Object.keys(FIREBASE_CONFIG).length === 0) {
+      console.error("Firebase config is missing.");
+      // Stop loading if config is missing to prevent infinite loading state
+      setIsLoading(false); 
+      return;
     }
-    // Should not be reached, but needed for TypeScript
-    throw new Error('Fetch failed after multiple retries.');
-}
 
-// NOTE: We assume Tailwind CSS is configured in the project environment.
+    try {
+      const app = initializeApp(FIREBASE_CONFIG);
+      const authInstance = getAuth(app);
+      const dbInstance = getFirestore(app);
 
-const App: React.FC = () => {
-    const [email, setEmail] = useState('');
-    const [message, setMessage] = useState('');
-    const [isSuccess, setIsSuccess] = useState(false);
+      setAuth(authInstance);
+      setDb(dbInstance);
 
-    /**
-     * Opens a new window for the AI chat application.
-     */
-    const openChat = () => {
-        // This assumes ai_chatbot_app.html is deployed to the root of your Netlify site.
-        const url = 'ai_chatbot_app.html';
-        const name = 'MelotwoAIChatbot';
-        const specs = 'width=400,height=600,resizable=yes,scrollbars=yes,status=yes';
-        window.open(url, name, specs);
-    };
-
-    /**
-     * Handles form submission to the Klaviyo API (V1 legacy endpoint).
-     */
-    const submitForm = async (event: FormEvent) => {
-        event.preventDefault();
-        setMessage('Submitting...');
-        setIsSuccess(false);
-
-        if (!email) {
-            setMessage('Please provide a valid email.');
-            return;
-        }
-
-        const emailValue = email;
-        const listId = KLAVYO_LIST_ID;
-        const accountId = KLAVYO_ACCOUNT_ID;
-
-        // NOTE: For single-file immersives, the API key is left empty and handled by the environment.
-        const apiKey = "";
-        const apiUrl = `https://a.klaviyo.com/api/v1/list/${listId}/subscribe?api_key=${accountId}`;
-
-        // Payload structured for the Klaviyo V1 legacy form submission endpoint
-        const payload = {
-            a: accountId,
-            email: emailValue,
-            'g': listId,
-            'g$id': listId,
-            'g$email': emailValue,
-            '$fields': JSON.stringify({
-                '$email': emailValue,
-            }),
-        };
-
-        // Convert payload to application/x-www-form-urlencoded format
-        const formData = new URLSearchParams(payload as Record<string, string>).toString();
-
+      const authenticate = async () => {
         try {
-            const response = await fetchWithRetry(apiUrl, {
-                method: 'POST',
-                headers: {
-                    // Using application/x-www-form-urlencoded for V1 API endpoint compatibility
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: formData
-            });
-
-            if (response.ok) {
-                setMessage('Success! Your catalog and checklist are on the way.');
-                setIsSuccess(true);
-                setEmail(''); // Clear email field on success
-            } else {
-                // Attempt to read error body
-                try {
-                    const errorData = await response.json();
-                    // Klaviyo V1 returns a detailed error in JSON format
-                    const errorMessage = errorData.detail || `Subscription failed with status ${response.status}. Please try again.`;
-                    setMessage(errorMessage);
-                    setIsSuccess(false);
-                } catch (jsonError) {
-                    setMessage(`Subscription failed (Status: ${response.status}).`);
-                    setIsSuccess(false);
-                }
-            }
+          if (INITIAL_AUTH_TOKEN) {
+            await signInWithCustomToken(authInstance, INITIAL_AUTH_TOKEN);
+          } else {
+            await signInAnonymously(authInstance);
+          }
         } catch (error) {
-            console.error('Klaviyo API Error:', error);
-            setMessage('Network error. Check your connection or try again later.');
-            setIsSuccess(false);
+          console.error("Firebase Authentication failed:", error);
+          // Fallback to anonymous if custom token fails
+          await signInAnonymously(authInstance);
         }
+      };
+      
+      authenticate();
+
+      const unsubscribe = onAuthStateChanged(authInstance, (user) => {
+        if (user) {
+          setUserId(user.uid);
+        } else {
+          // If sign-in failed or signed out, use a random ID as fallback
+          setUserId(crypto.randomUUID()); 
+        }
+      });
+
+      return () => unsubscribe(); // Cleanup auth listener
+    } catch (e) {
+      console.error("Firebase initialization failed:", e);
+      setIsLoading(false);
+    }
+  }, []);
+
+  // 2. Real-time Cart Listener (onSnapshot)
+  useEffect(() => {
+    if (!db || !userId) return;
+
+    // Path: /artifacts/{APP_ID}/users/{userId}/carts/mainCart
+    const cartRef = doc(db, 'artifacts', APP_ID, 'users', userId, 'carts', 'mainCart');
+
+    const unsubscribe = onSnapshot(cartRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setCart(data.items || []);
+      } else {
+        // Document does not exist, initialize with an empty cart
+        setCart([]);
+      }
+      setIsLoading(false);
+    }, (error) => {
+      console.error("Error reading cart from Firestore:", error);
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe(); // Cleanup snapshot listener
+  }, [db, userId]);
+
+
+  // Helper function to update cart state locally and save to Firestore
+  const updateCartAndSave = useCallback((newCart) => {
+    setCart(newCart);
+    if (db && userId) {
+      saveCartToFirestore(db, userId, newCart);
+    }
+  }, [db, userId]);
+
+
+  // --- Cart Modification Logic (now updates Firestore) ---
+
+  const addToCart = useCallback((product) => {
+    setPurchaseMessage(null); // Clear message on new action
+    const existingItem = cart.find(item => item.id === product.id);
+
+    let newCart;
+    if (existingItem) {
+      newCart = cart.map(item =>
+        item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+      );
+    } else {
+      newCart = [...cart, { ...product, quantity: 1 }];
+    }
+    updateCartAndSave(newCart);
+  }, [cart, updateCartAndSave]);
+
+  const updateQuantity = useCallback((productId, delta) => {
+    const newCart = cart.reduce((acc, item) => {
+      if (item.id === productId) {
+        const newQuantity = item.quantity + delta;
+        if (newQuantity > 0) {
+          acc.push({ ...item, quantity: newQuantity });
+        }
+      } else {
+        acc.push(item);
+      }
+      return acc;
+    }, []);
+    updateCartAndSave(newCart);
+  }, [cart, updateCartAndSave]);
+
+  const removeItem = useCallback((productId) => {
+    const newCart = cart.filter(item => item.id !== productId);
+    updateCartAndSave(newCart);
+  }, [cart, updateCartAndSave]);
+
+  // Calculations (Use useMemo for performance)
+  const { subtotal, totalItems, tax, total } = useMemo(() => {
+    const sub = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const items = cart.reduce((sum, item) => sum + item.quantity, 0);
+    const taxRate = 0.15; // Example 15% VAT/Sales Tax
+    const calculatedTax = sub * taxRate;
+    const calculatedTotal = sub + calculatedTax;
+    return {
+      subtotal: sub,
+      totalItems: items,
+      tax: calculatedTax,
+      total: calculatedTotal
     };
+  }, [cart]);
 
-    return (
-        <div className="min-h-screen bg-gray-50 flex flex-col font-sans antialiased">
-            {/* Floating Chat Button */}
-            {/* Added aria-label for accessibility */}
-            <button
-                onClick={openChat}
-                className="fixed bottom-6 right-6 z-50 p-4 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-700 transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-red-300"
-                aria-label="Open Melotwo AI Assistant"
-                title="Melotwo AI Assistant"
-            >
-                {/* Chat Bubble Icon */}
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.805A9.73 9.73 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-            </button>
 
-            {/* Header/Navigation */}
-            <header className="bg-white shadow-md sticky top-0 z-40">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-                    <h1 className="text-3xl font-extrabold text-red-600">Melotwo</h1>
-                    <nav className="hidden md:flex space-x-8">
-                        <a href="#compliance" className="text-gray-600 hover:text-red-600 transition duration-150">Compliance</a>
-                        <a href="#partnership" className="text-gray-600 hover:text-red-600 transition duration-150">Partnership</a>
-                        <a href="#contact" className="text-gray-600 hover:text-red-600 transition duration-150">Contact</a>
-                        {/* Added rel="noopener noreferrer" for security on external link */}
-                        <a href={AFFILIATE_LINK} target="_blank" rel="noopener noreferrer" className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition duration-150 shadow-md">
-                            Explore Catalog
-                        </a>
-                    </nav>
-                    {/* Mobile Menu Icon Placeholder (for future implementation) */}
-                    <button className="md:hidden text-gray-600 hover:text-red-600" aria-label="Open mobile menu">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16m-7 6h7" />
-                        </svg>
-                    </button>
-                </div>
-            </header>
+  // Handle the final purchase action
+  const handlePurchase = async () => {
+    if (cart.length === 0) {
+      setPurchaseMessage("Your cart is empty. Please add items before checking out.");
+      return;
+    }
 
-            <main className="flex-grow">
-                {/* Hero Section */}
-                <section className="bg-gray-900 text-white py-20 md:py-32 relative overflow-hidden">
-                    {/* Placeholder for background image to prevent CLS/Flickering */}
-                    <div className="absolute inset-0 bg-cover bg-center opacity-20"
-                        style={{ backgroundImage: "url('https://placehold.co/1920x1080/0f172a/ffffff?text=Certified+Mine+Equipment')" }}
-                        aria-hidden="true"
-                    ></div>
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
-                        <p className="text-red-400 font-semibold uppercase tracking-widest mb-3">SABS/ISO Certified PPE</p>
-                        <h2 className="text-4xl md:text-6xl font-extrabold leading-tight mb-6">
-                            The Only Supply Chain Built for <span className="text-red-600">African Mining Compliance</span>.
-                        </h2>
-                        <p className="text-xl text-gray-300 max-w-3xl mx-auto mb-10">
-                            Melotwo partners with the best in the industry to ensure your site is 100% compliant, reduces risk, and cuts replacement costs with superior, certified equipment.
-                        </p>
-                        {/* Added rel="noopener noreferrer" for security on external link */}
-                        <a href={AFFILIATE_LINK} target="_blank" rel="noopener noreferrer" className="inline-block px-10 py-4 text-lg font-bold text-gray-900 bg-amber-400 rounded-xl hover:bg-amber-300 transition duration-300 transform hover:scale-105 shadow-xl">
-                            View Certified Catalog Now
-                        </a>
-                    </div>
-                </section>
+    // Simulate successful purchase and clear the cart in Firestore
+    setPurchaseMessage(`Purchase successful! Your total was $${total.toFixed(2)}. ${totalItems} items are on their way.`);
+    
+    // Clear the cart in Firestore
+    await updateCartAndSave([]);
+  };
 
-                {/* Compliance & Risk Section */}
-                <section id="compliance" className="py-20 bg-white">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <h3 className="text-3xl font-bold text-center text-gray-800 mb-12">Stop Risk. Guarantee Compliance.</h3>
+  // --- Child Components ---
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                            {/* Feature Card 1 */}
-                            <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-red-600">
-                                <div className="text-red-600 mb-4">
-                                    {/* Shield Icon */}
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-9.618 4.016M21 12v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5M10 20l4-4" />
-                                    </svg>
-                                </div>
-                                <h4 className="text-xl font-semibold mb-3 text-gray-900">SABS/ISO Guarantee</h4>
-                                <p className="text-gray-600">We only source equipment with verifiable SABS and international ISO certifications, removing guesswork and liability from your procurement team.</p>
-                            </div>
+  // Component to render individual Product Cards
+  const ProductCard = ({ product }) => (
+    <div className="bg-white p-4 rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col items-center space-y-3 transform hover:scale-[1.02] active:scale-100">
+      <img src={product.image} alt={product.name} className="w-24 h-24 object-cover rounded-md border border-gray-100" onError={(e) => e.target.src = `https://placehold.co/128x128/333333/FFFFFF?text=${product.name.split(' ')[0]}`}/>
+      <h3 className="text-lg font-semibold text-gray-800 text-center">{product.name}</h3>
+      <p className="text-xl font-bold text-green-600">${product.price.toFixed(2)}</p>
+      <button
+        onClick={() => addToCart(product)}
+        className="w-full py-2 px-4 bg-blue-600 text-white font-medium rounded-lg shadow-md hover:bg-blue-700 transition-all duration-200 flex items-center justify-center text-sm transform hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-300"
+      >
+        <Plus size={16} className="mr-2" /> Add to Cart
+      </button>
+    </div>
+  );
 
-                            {/* Feature Card 2 */}
-                            <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-red-600">
-                                <div className="text-red-600 mb-4">
-                                    {/* Dollar Icon */}
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m0 0l-1 1M10 15h4m-4 0a3 3 0 006 0V5h-6v10zM17 17H7m0 0l-1-1" />
-                                    </svg>
-                                </div>
-                                <h4 className="text-xl font-semibold mb-3 text-gray-900">Durability = Savings</h4>
-                                <p className="text-gray-600">Higher quality gear lasts longer in harsh African mine conditions, significantly reducing your annual replacement frequency and associated costs.</p>
-                            </div>
-
-                            {/* Feature Card 3 */}
-                            <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-red-600">
-                                <div className="text-red-600 mb-4">
-                                    {/* Truck Icon */}
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8m0 0V3m0 0L8 7m4-4l4 4m-4 4h.01M3 15h2l2 4m0 0h12l2-4h2M5 15l2-4h10l2 4M12 11h.01M3 17h2v2H3v-2zm16 0h2v2h-2v-2z" />
-                                    </svg>
-                                </div>
-                                <h4 className="text-xl font-semibold mb-3 text-gray-900">Streamlined Logistics</h4>
-                                <p className="text-gray-600">Access consolidated bulk quotes and rapid fulfillment from a single source, drastically cutting administrative time and supply chain complexity.</p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                {/* Partnership Section */}
-                <section id="partnership" className="bg-gray-100 py-20">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                        <h3 className="text-3xl font-bold text-gray-800 mb-4">Official Affiliate Partner of Mine Africa Safety Solutions</h3>
-                        <p className="text-xl text-gray-600 max-w-4xl mx-auto mb-10">
-                            We have integrated the full, certified catalog of Mine Africa Safety Solutions directly into our supply chain—giving you unparalleled access to the best mine-grade PPE.
-                        </p>
-
-                        {/* Added rel="noopener noreferrer" for security on external link */}
-                        <a href={AFFILIATE_LINK} target="_blank" rel="noopener noreferrer" className="inline-block px-8 py-3 text-lg font-bold text-white bg-red-600 rounded-xl hover:bg-red-700 transition duration-300 shadow-lg">
-                            Browse Partner Catalog
-                        </a>
-                    </div>
-                </section>
-
-                {/* Contact/Sign-up Section */}
-                <section id="contact" className="py-20 bg-red-600">
-                    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                        <h3 className="text-3xl md:text-4xl font-extrabold text-white mb-4">Secure Your B2B Pricing and Compliance Checklist</h3>
-                        <p className="text-xl text-red-100 mb-8">
-                            Enter your professional email to receive the full certified product catalog and our essential Mine Safety Compliance Checklist.
-                        </p>
-
-                        <form onSubmit={submitForm} className="space-y-4">
-                            <div>
-                                <input
-                                    type="email"
-                                    placeholder="Your Professional Email Address"
-                                    required
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full px-6 py-3 rounded-xl focus:ring-amber-400 focus:border-amber-400 border-gray-300 text-gray-900"
-                                />
-                            </div>
-                            <div>
-                                <button
-                                    type="submit"
-                                    disabled={!email}
-                                    className="w-full px-6 py-3 text-lg font-bold text-gray-900 bg-amber-400 rounded-xl hover:bg-amber-300 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-                                >
-                                    Get Catalog & Checklist
-                                </button>
-                            </div>
-                            {message && (
-                                <p className={`text-sm font-semibold ${isSuccess ? 'text-white' : 'text-red-200'}`}>{message}</p>
-                            )}
-                        </form>
-                    </div>
-                </section>
-
-            </main>
-
-            {/* Footer */}
-            <footer className="bg-gray-900 text-gray-400 py-8">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm">
-                    <p>&copy; {currentYear} Melotwo. All rights reserved. | Official Affiliate Partner of Mine Africa Safety Solutions.</p>
-                </div>
-            </footer>
+  // Component to render individual Cart Rows
+  const CartRow = ({ item }) => (
+    <div className="flex items-center justify-between py-3 border-b border-gray-200 last:border-b-0">
+      <div className="flex items-start space-x-3 w-3/5">
+        <img src={item.image} alt={item.name} className="w-12 h-12 object-cover rounded-md flex-shrink-0" onError={(e) => e.target.src = `https://placehold.co/48x48/333333/FFFFFF?text=Item`}/>
+        <div className="flex flex-col min-w-0">
+          <span className="font-medium text-gray-800 line-clamp-2">{item.name}</span>
+          <span className="text-sm text-gray-500">${item.price.toFixed(2)} ea</span>
         </div>
+      </div>
+
+      <div className="flex items-center space-x-2 w-2/5 justify-end">
+        {/* Quantity Controls */}
+        <div className="flex items-center border border-gray-300 rounded-lg bg-white">
+          <button
+            onClick={() => updateQuantity(item.id, -1)}
+            className="p-1 text-gray-600 hover:bg-gray-100 rounded-l-lg transition-colors duration-100 disabled:opacity-50"
+            aria-label={`Decrease quantity of ${item.name}`}
+            disabled={item.quantity <= 1}
+          >
+            <Minus size={16} />
+          </button>
+          <span className="px-2 w-8 text-center text-sm font-semibold text-gray-900">{item.quantity}</span>
+          <button
+            onClick={() => updateQuantity(item.id, 1)}
+            className="p-1 text-gray-600 hover:bg-gray-100 rounded-r-lg transition-colors duration-100"
+            aria-label={`Increase quantity of ${item.name}`}
+          >
+            <Plus size={16} />
+          </button>
+        </div>
+
+        {/* Subtotal and Remove Button */}
+        <div className="flex items-center space-x-2 ml-4">
+          <span className="font-bold text-base text-gray-900 w-16 text-right hidden sm:inline">${(item.price * item.quantity).toFixed(2)}</span>
+          <button
+            onClick={() => removeItem(item.id)}
+            className="p-1 text-red-500 hover:bg-red-100 rounded-full transition-colors duration-100"
+            aria-label={`Remove ${item.name} from cart`}
+          >
+            <X size={18} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="flex flex-col items-center space-y-3 p-8 bg-white rounded-xl shadow-xl">
+          <Loader size={32} className="animate-spin text-blue-600" />
+          <p className="text-lg font-medium text-gray-700">Loading Store and Cart...</p>
+        </div>
+      </div>
     );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans">
+      
+      {/* Header */}
+      <header className="sticky top-0 bg-white shadow-lg z-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+          <h1 className="text-3xl font-extrabold text-blue-600 tracking-tight">
+            👷 PPE Secure Store
+          </h1>
+          <div className="flex items-center space-x-4">
+            {userId && (
+              <div className="flex items-center text-xs sm:text-sm text-gray-600 bg-gray-100 p-2 rounded-lg shadow-inner">
+                <User size={16} className="mr-2 text-gray-500 hidden sm:inline" />
+                <span className="font-medium">User ID:</span> 
+                <span className="ml-1 truncate max-w-[100px] sm:max-w-none font-mono">{userId}</span>
+              </div>
+            )}
+            <span className="relative">
+              <ShoppingCart className="text-gray-600" size={28} />
+              {totalItems > 0 && (
+                <span className="absolute -top-2 -right-2 bg-red-600 text-white text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center ring-2 ring-white shadow-md">
+                  {totalItems > 99 ? '99+' : totalItems}
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="lg:grid lg:grid-cols-3 lg:gap-10">
+          
+          {/* Product Grid (2/3 width on desktop) */}
+          <section className="lg:col-span-2 space-y-8">
+            <h2 className="text-3xl font-extrabold text-gray-800 pb-4 border-b-4 border-blue-100">Essential Safety Gear</h2>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
+              {PRODUCTS.map(product => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          </section>
+
+          {/* Shopping Cart Sidebar (1/3 width on desktop) */}
+          <aside className="lg:col-span-1 mt-10 lg:mt-0 sticky top-28 h-fit">
+            <div className="bg-white p-6 rounded-2xl shadow-3xl border border-gray-200 space-y-6">
+              
+              <h2 className="text-2xl font-bold text-gray-900 flex items-center pb-2 border-b">
+                <ShoppingCart size={24} className="mr-2 text-blue-600" />
+                Your Cart
+              </h2>
+
+              {/* Purchase Message */}
+              {purchaseMessage && (
+                <div className={`p-4 rounded-xl text-base font-semibold ${cart.length === 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                  {purchaseMessage}
+                </div>
+              )}
+
+              {/* Cart Items List */}
+              <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+                {cart.length === 0 ? (
+                  <p className="text-gray-500 py-6 text-center italic">Your persistent cart is empty. Start shopping!</p>
+                ) : (
+                  cart.map(item => <CartRow key={item.id} item={item} />)
+                )}
+              </div>
+
+              {/* Summary and Checkout */}
+              <div className="pt-4 border-t border-gray-300 space-y-3">
+                <div className="flex justify-between font-medium text-gray-700">
+                  <span>Subtotal:</span>
+                  <span>${subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-medium text-gray-700">
+                  <span>Tax (15%):</span>
+                  <span>${tax.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-extrabold text-xl text-gray-900 pt-3 border-t border-gray-300">
+                  <span>Order Total:</span>
+                  <span>${total.toFixed(2)}</span>
+                </div>
+
+                <button
+                  onClick={handlePurchase}
+                  disabled={cart.length === 0}
+                  className="w-full py-3 mt-4 bg-green-600 text-white font-bold rounded-xl shadow-lg hover:bg-green-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-lg transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-green-300"
+                >
+                  <CreditCard size={20} />
+                  <span>Proceed to Checkout</span>
+                </button>
+              </div>
+
+            </div>
+          </aside>
+        </div>
+      </main>
+
+    </div>
+  );
 };
 
 export default App;
