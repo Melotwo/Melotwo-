@@ -1,7 +1,7 @@
 import React, { useState, useEffect, FormEvent } from 'react';
 import ReactDOM from 'react-dom/client';
 // CRITICAL: Ensure this path is correct and points to App.tsx in the same directory.
-import App from './App.tsx'; 
+import { App } from './App.tsx'; 
 
 // FIREBASE IMPORTS
 import { initializeApp } from 'firebase/app';
