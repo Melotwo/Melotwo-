@@ -1,333 +1,583 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, User } from 'firebase/auth';
+import { getFirestore, collection, doc, onSnapshot, setDoc, query, orderBy, where, deleteDoc } from 'firebase/firestore';
+import { Home, LayoutDashboard, Settings, LogOut, ArrowUpRight, Plus, Users, Menu, X, CheckCircle, Clock, ListPlus, Link } from 'lucide-react';
 
-// Icons from lucide-react (used for clean, modern look)
-import { ShieldCheck, HardHat, Bolt, Users, Mail, Phone, MapPin, Menu, X, ChevronRight } from 'lucide-react';
+// --- Global Variables and Configuration ---
+// These are provided by the canvas environment.
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : '';
 
-// Define the main content sections
-const features = [
-  {
-    icon: HardHat,
-    title: "Certified Safety Gear",
-    description: "Providing rugged and certified personal protective equipment (PPE) specifically designed for the demanding African mining environment.",
-  },
-  {
-    icon: Bolt,
-    title: "Smart Monitoring Systems",
-    description: "Real-time environmental and personnel monitoring systems to detect hazards and prevent accidents proactively.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Compliance & Auditing",
-    description: "Expert consultancy to ensure full compliance with international safety standards and local mining regulations.",
-  },
-  {
-    icon: Users,
-    title: "Training & Capacity Building",
-    description: "On-site and digital training programs for mine workers and management focused on best-practice safety protocols.",
-  },
-];
+// --- Type Definitions for Strict TypeScript ---
+interface NavItemProps {
+  href: string;
+  children: React.ReactNode;
+  onClick: () => void;
+  isActive: boolean;
+}
 
-// Reusable Button Component
-const PrimaryButton = ({ children, className = '' }) => (
-  <button
-    className={`bg-yellow-500 text-gray-900 font-bold py-3 px-8 rounded-xl shadow-lg hover:bg-yellow-400 transition duration-300 ease-in-out transform hover:scale-[1.02] ${className}`}
-  >
-    {children}
-  </button>
-);
+interface FeatureCardProps {
+  Icon: React.ElementType;
+  title: string;
+  value: string;
+  link: string;
+}
 
-// Navigation Link Component
-const NavLink = ({ href, children, onClick }) => (
-  <a
-    href={href}
-    onClick={onClick}
-    className="text-gray-200 hover:text-yellow-500 transition duration-200 px-3 py-2 text-lg font-medium"
-  >
-    {children}
-  </a>
-);
+interface InputFieldProps {
+  id: string;
+  label: string;
+  type: 'text' | 'number' | 'email';
+  placeholder: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}
 
-// Header/Navigation Component
-const Header = () => {
-  const [isOpen, setIsOpen] = React.useState(false);
+interface ProjectData {
+  id: string;
+  name: string;
+  description: string;
+  dueDate: string;
+  status: 'In Progress' | 'Completed' | 'Pending';
+  priority: 'High' | 'Medium' | 'Low';
+  ownerId: string;
+  createdAt: number;
+}
 
-  const navItems = [
-    { name: 'Home', href: '#home' },
-    { name: 'Solutions', href: '#solutions' },
-    { name: 'About Us', href: '#about' },
-    { name: 'Contact', href: '#contact' },
-  ];
+interface TaskData {
+  id: string;
+  projectId: string;
+  title: string;
+  isComplete: boolean;
+  createdAt: number;
+}
+
+// --- Firebase Initialization and Auth Logic (Moved to top-level for context) ---
+let app;
+let db: any;
+let auth: any;
+
+try {
+  app = initializeApp(firebaseConfig);
+  db = getFirestore(app);
+  auth = getAuth(app);
+} catch (error) {
+  console.error("Firebase initialization failed:", error);
+}
+
+// --- Utility Functions ---
+
+/**
+ * Creates a firestore path for public data shared across all users in this app.
+ * @param collectionName The name of the collection (e.g., 'projects').
+ * @returns The full Firestore path.
+ */
+const getPublicCollectionPath = (collectionName: string) => {
+  return `artifacts/${appId}/public/data/${collectionName}`;
+};
+
+/**
+ * Converts a Firestore timestamp or date string into a readable format.
+ * @param dateString The date string (e.g., '2025-12-31').
+ * @returns A formatted date string.
+ */
+const formatDate = (dateString: string): string => {
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch (e) {
+    return dateString; // Return original if parsing fails
+  }
+};
+
+
+// --- Component Definitions ---
+
+// Reusable Navigation Link Component
+const NavItem: React.FC<NavItemProps> = ({ href, children, onClick, isActive }) => {
+  const baseClasses = "flex items-center space-x-3 p-3 text-sm font-medium rounded-xl transition-all duration-200";
+  const activeClasses = isActive
+    ? "bg-indigo-600 text-white shadow-lg"
+    : "text-indigo-200 hover:bg-indigo-700 hover:text-white";
 
   return (
-    <header className="sticky top-0 z-50 bg-gray-900 shadow-xl border-b border-gray-700">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-20">
-          <div className="flex items-center">
-            {/* Logo/Brand Name */}
-            <a href="#home" className="text-3xl font-extrabold text-white tracking-wider">
-              MELO<span className="text-yellow-500">TWO</span>
-            </a>
-          </div>
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex space-x-4">
-            {navItems.map(item => (
-              <NavLink key={item.name} href={item.href}>{item.name}</NavLink>
-            ))}
-          </nav>
-          {/* Mobile Menu Button */}
-          <div className="md:hidden">
-            <button
-              onClick={() => setIsOpen(!isOpen)}
-              className="inline-flex items-center justify-center p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-yellow-500"
-              aria-expanded={isOpen ? 'true' : 'false'}
-              aria-label="Toggle navigation"
-            >
-              {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Mobile Menu Panel */}
-      {isOpen && (
-        <div className="md:hidden bg-gray-800 shadow-lg border-t border-gray-700">
-          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 flex flex-col">
-            {navItems.map(item => (
-              <NavLink key={item.name} href={item.href} onClick={() => setIsOpen(false)}>
-                {item.name}
-              </NavLink>
-            ))}
-            <PrimaryButton className="w-full mt-4">Get a Quote</PrimaryButton>
-          </div>
-        </div>
-      )}
-    </header>
+    <a href={href} onClick={onClick} className={`${baseClasses} ${activeClasses}`}>
+      {children}
+    </a>
   );
 };
 
-// Hero Section Component
-const Hero = () => (
-  <section id="home" className="bg-gray-900 text-white min-h-[calc(100vh-80px)] flex items-center pt-20 pb-10">
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6">
-          <span className="block text-yellow-500">Certified Safety,</span>
-          <span className="block mt-2">Uplifting African Mining.</span>
-        </h1>
-        <p className="mt-4 text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto">
-          We provide cutting-edge, certified safety solutions and technology, enabling mining operations across Africa to achieve **zero harm** and sustainable productivity.
-        </p>
-        <div className="mt-10 flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-6">
-          <PrimaryButton>
-            Explore Our Solutions
-          </PrimaryButton>
-          <a
-            href="#contact"
-            className="inline-flex items-center justify-center font-bold py-3 px-8 rounded-xl text-yellow-500 border-2 border-yellow-500 hover:bg-yellow-500 hover:text-gray-900 transition duration-300"
-          >
-            Contact a Specialist
-            <ChevronRight className="w-5 h-5 ml-1" />
-          </a>
-        </div>
-      </div>
-    </div>
-  </section>
-);
-
-// Features/Solutions Section Component
-const Solutions = () => (
-  <section id="solutions" className="py-20 bg-gray-800">
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="text-center">
-        <h2 className="text-base text-yellow-500 font-semibold tracking-wide uppercase">Our Core Offering</h2>
-        <p className="mt-2 text-4xl font-extrabold text-white sm:text-5xl">
-          Comprehensive Safety Solutions for the Mine
-        </p>
-        <p className="mt-4 text-xl text-gray-300 max-w-3xl mx-auto">
-          From essential protective gear to advanced monitoring technology, our solutions are engineered for reliability in the harshest conditions.
-        </p>
-      </div>
-
-      <div className="mt-16 grid grid-cols-1 gap-12 sm:grid-cols-2 lg:grid-cols-4">
-        {features.map((feature) => (
-          <div key={feature.title} className="p-6 bg-gray-900 rounded-xl shadow-2xl transition duration-500 transform hover:scale-[1.03] hover:shadow-yellow-500/20 group">
-            <feature.icon className="h-10 w-10 text-yellow-500 mb-4" />
-            <h3 className="text-xl font-bold text-white mb-3 group-hover:text-yellow-500 transition duration-300">{feature.title}</h3>
-            <p className="text-gray-400">{feature.description}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  </section>
-);
-
-// About Us Section Component
-const AboutUs = () => (
-  <section id="about" className="py-20 bg-gray-900">
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="lg:grid lg:grid-cols-2 lg:gap-12 lg:items-center">
-        <div className="lg:col-span-1">
-          <h2 className="text-base text-yellow-500 font-semibold tracking-wide uppercase">Who We Are</h2>
-          <p className="mt-2 text-4xl font-extrabold text-white sm:text-5xl">
-            Pioneers in African Mining Safety
-          </p>
-          <p className="mt-6 text-lg text-gray-300">
-            Melotwo was founded on the principle that every miner deserves to return home safely. We transitioned from a basic service provider to a technology-driven solutions house, committed to addressing the unique safety challenges faced by the African mining sector. Our approach combines rigorous certification with deep regional understanding.
-          </p>
-          <p className="mt-4 text-lg text-gray-300 font-semibold border-l-4 border-yellow-500 pl-4">
-            Our mission is simple: to make African mines the safest in the world through innovation and uncompromising quality.
-          </p>
-          <div className="mt-8">
-            <PrimaryButton className="text-sm">
-              View Our Certifications
-            </PrimaryButton>
-          </div>
-        </div>
-        <div className="mt-10 lg:mt-0 lg:col-span-1">
-          {/* Placeholder for an image or a compelling safety stat */}
-          <div className="p-8 bg-gray-800 rounded-xl shadow-2xl text-center">
-            <p className="text-6xl font-extrabold text-yellow-500">99.9%</p>
-            <p className="mt-2 text-2xl text-white">Equipment Reliability Rate</p>
-            <p className="mt-4 text-gray-400">Our commitment to quality ensures equipment longevity and performance in harsh mining conditions.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-);
-
-// Contact Section Component
-const Contact = () => (
-  <section id="contact" className="py-20 bg-gray-700">
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="text-center">
-        <h2 className="text-base text-yellow-300 font-semibold tracking-wide uppercase">Get in Touch</h2>
-        <p className="mt-2 text-4xl font-extrabold text-white sm:text-5xl">
-          Connect with a Safety Specialist
-        </p>
-        <p className="mt-4 text-xl text-gray-200 max-w-3xl mx-auto">
-          We are ready to discuss your specific needs and tailor a solution for your site. Reach out today.
-        </p>
-      </div>
-
-      <div className="mt-12 lg:grid lg:grid-cols-3 lg:gap-8">
-        {/* Contact Info */}
-        <div className="lg:col-span-1 space-y-8 p-6 bg-gray-800 rounded-xl shadow-2xl mb-8 lg:mb-0">
-          <ContactDetail
-            icon={MapPin}
-            title="Office Location"
-            value="Melotwo Headquarters, Africa"
-            link="#"
-          />
-          <ContactDetail
-            icon={Phone}
-            title="Call Us"
-            value="+27 11 555 1234 (South Africa)"
-            link="tel:+27115551234"
-          />
-          <ContactDetail
-            icon={Mail}
-            title="Email Us"
-            value="safety@melotwo.com"
-            link="mailto:safety@melotwo.com"
-          />
-        </div>
-
-        {/* Contact Form Placeholder */}
-        <div className="lg:col-span-2 p-8 bg-gray-900 rounded-xl shadow-2xl">
-          <form className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <InputField id="name" label="Full Name" type="text" placeholder="Your Name" />
-              <InputField id="email" label="Work Email" type="email" placeholder="example@minecorp.com" />
-            </div>
-            <InputField id="company" label="Company / Mine Site" type="text" placeholder="MineCorp Group" />
-            <div className="col-span-2">
-              <label htmlFor="message" className="block text-sm font-medium text-gray-300 mb-2">
-                Your Inquiry
-              </label>
-              <textarea
-                id="message"
-                name="message"
-                rows={4}
-                className="w-full bg-gray-700 text-white border-gray-600 rounded-lg shadow-sm focus:border-yellow-500 focus:ring-yellow-500 p-3"
-                placeholder="Tell us about your safety needs..."
-              />
-            </div>
-            <PrimaryButton className="w-full">
-              Send Message
-            </PrimaryButton>
-          </form>
-        </div>
-      </div>
-    </div>
-  </section>
-);
-
-// Reusable Contact Detail Component
-const ContactDetail = ({ icon: Icon, title, value, link }) => (
-  <div className="flex items-start space-x-4">
-    <Icon className="h-8 w-8 text-yellow-500 flex-shrink-0 mt-1" />
-    <div>
-      <h4 className="text-lg font-bold text-white">{title}</h4>
-      <a
-        href={link}
-        className="text-gray-300 hover:text-yellow-500 transition duration-200 block text-base"
-      >
-        {value}
-      </a>
-    </div>
-  </div>
-);
-
 // Reusable Input Field Component
-const InputField = ({ id, label, type, placeholder }) => (
-  <div>
-    <label htmlFor={id} className="block text-sm font-medium text-gray-300 mb-2">
+const InputField: React.FC<InputFieldProps> = ({ id, label, type, placeholder, value, onChange }) => (
+  <div className="mb-4">
+    <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
       {label}
     </label>
     <input
       type={type}
-      name={id}
       id={id}
-      className="w-full bg-gray-700 text-white border-gray-600 rounded-lg shadow-sm focus:border-yellow-500 focus:ring-yellow-500 p-3"
       placeholder={placeholder}
+      value={value}
+      onChange={onChange}
+      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out shadow-sm"
     />
   </div>
 );
 
-// Footer Component
-const Footer = () => (
-  <footer className="bg-gray-900 border-t border-gray-700">
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 text-center">
-      <div className="flex justify-center space-x-4 mb-4">
-        <NavLink href="#solutions">Solutions</NavLink>
-        <NavLink href="#about">About</NavLink>
-        <NavLink href="#contact">Contact</NavLink>
-      </div>
-      <p className="text-gray-500 text-sm">
-        &copy; {new Date().getFullYear()} Melotwo. All rights reserved. | Certified Safety Solutions for the African Mining Industry.
-      </p>
-      <p className="text-gray-500 text-xs mt-1">
-        Built with React and Tailwind CSS.
-      </p>
+// Reusable Feature Card Component
+const FeatureCard: React.FC<FeatureCardProps> = ({ Icon, title, value, link }) => (
+  <div className="bg-white p-6 rounded-2xl shadow-xl transition-all duration-300 hover:shadow-2xl hover:scale-[1.02]">
+    <div className="flex items-center justify-between">
+      <Icon className="w-8 h-8 text-indigo-500" />
+      <a href={link} className="text-sm font-semibold text-indigo-500 hover:text-indigo-700 transition flex items-center">
+        View All
+        <ArrowUpRight className="w-4 h-4 ml-1" />
+      </a>
     </div>
-  </footer>
+    <div className="mt-4">
+      <p className="text-gray-500 text-sm">{title}</p>
+      <p className="text-3xl font-bold text-gray-900 mt-1">{value}</p>
+    </div>
+  </div>
 );
 
+// --- Main Project List/Display Component ---
+const ProjectList: React.FC<{ projects: ProjectData[]; userId: string | null; db: any }> = ({ projects, userId, db }) => {
+  
+  const handleDelete = async (projectId: string) => {
+    if (!db || !userId) return;
+    if (window.confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
+      try {
+        const docRef = doc(db, getPublicCollectionPath('projects'), projectId);
+        await deleteDoc(docRef);
+        console.log(`Project ${projectId} deleted successfully.`);
+      } catch (error) {
+        console.error("Error deleting project:", error);
+      }
+    }
+  };
 
-// Main App Component
-const App = () => {
-  // Sets the default font and background for the whole page
+  const sortedProjects = projects.sort((a, b) => b.createdAt - a.createdAt);
+
+  if (sortedProjects.length === 0) {
+    return (
+      <div className="text-center p-10 bg-white rounded-2xl shadow-lg mt-6">
+        <p className="text-gray-500 text-lg">No projects found. Use the "Add New Project" section to start!</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-900 font-['Inter'] antialiased">
-      <Header />
-      <main>
-        <Hero />
-        <Solutions />
-        <AboutUs />
-        <Contact />
-      </main>
-      <Footer />
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+      {sortedProjects.map((project) => (
+        <div key={project.id} className="bg-white p-6 rounded-2xl shadow-xl border-l-4 border-indigo-500 hover:shadow-2xl transition duration-200">
+          <div className="flex justify-between items-start mb-4">
+            <h3 className="text-xl font-semibold text-gray-800 truncate pr-2" title={project.name}>{project.name}</h3>
+            {project.ownerId === userId && (
+              <button
+                onClick={() => handleDelete(project.id)}
+                className="text-red-500 hover:text-red-700 transition duration-150 p-1 rounded-full hover:bg-red-50"
+                aria-label={`Delete project ${project.name}`}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+          
+          <p className="text-sm text-gray-600 mb-3 line-clamp-2">{project.description}</p>
+          
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center text-gray-700">
+              <Clock className="w-4 h-4 mr-2 text-indigo-500" />
+              <span className="font-medium">Due:</span> {formatDate(project.dueDate)}
+            </div>
+            <div className="flex items-center text-gray-700">
+              <Users className="w-4 h-4 mr-2 text-indigo-500" />
+              <span className="font-medium">Owner ID:</span> <span className="text-xs ml-1 bg-gray-100 px-2 py-0.5 rounded-full font-mono">{project.ownerId}</span>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span
+              className={`text-xs font-semibold px-3 py-1 rounded-full ${
+                project.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                project.status === 'In Progress' ? 'bg-yellow-100 text-yellow-700' :
+                'bg-blue-100 text-blue-700'
+              }`}
+            >
+              {project.status}
+            </span>
+            <span
+              className={`text-xs font-semibold px-3 py-1 rounded-full ${
+                project.priority === 'High' ? 'bg-red-100 text-red-700' :
+                project.priority === 'Medium' ? 'bg-orange-100 text-orange-700' :
+                'bg-gray-100 text-gray-700'
+              }`}
+            >
+              {project.priority}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+
+// --- New Project Form Component ---
+const NewProjectForm: React.FC<{ db: any; userId: string | null }> = ({ db, userId }) => {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [status, setStatus] = useState<'In Progress' | 'Completed' | 'Pending'>('Pending');
+  const [priority, setPriority] = useState<'High' | 'Medium' | 'Low'>('Medium');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !dueDate || !db || !userId) {
+      setMessage('Please fill in Name and Due Date.');
+      return;
+    }
+
+    setLoading(true);
+    setMessage('');
+
+    try {
+      const projectsCollection = collection(db, getPublicCollectionPath('projects'));
+      // Using setDoc with a generated ID to create the document
+      const newDocRef = doc(projectsCollection);
+      
+      const newProject: Omit<ProjectData, 'id'> = {
+        name,
+        description,
+        dueDate,
+        status,
+        priority,
+        ownerId: userId,
+        createdAt: Date.now(),
+      };
+      
+      await setDoc(newDocRef, newProject);
+
+      setMessage(`Project "${name}" added successfully!`);
+      setName('');
+      setDescription('');
+      setDueDate('');
+      setStatus('Pending');
+      setPriority('Medium');
+    } catch (error) {
+      console.error('Error adding project:', error);
+      setMessage('Failed to add project. Check console for details.');
+    } finally {
+      setLoading(false);
+      setTimeout(() => setMessage(''), 5000);
+    }
+  };
+
+  return (
+    <div className="bg-white p-6 md:p-8 rounded-2xl shadow-xl mt-8">
+      <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+        <ListPlus className="w-6 h-6 mr-3 text-indigo-500" />
+        Add New Project
+      </h2>
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <InputField
+            id="projectName"
+            label="Project Name"
+            type="text"
+            placeholder="e.g., Q4 Marketing Campaign"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <div className="mb-4">
+            <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700 mb-1">
+              Due Date
+            </label>
+            <input
+              type="date"
+              id="dueDate"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out shadow-sm"
+            />
+          </div>
+        </div>
+        
+        <div className="mb-4">
+          <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+            Description
+          </label>
+          <textarea
+            id="description"
+            rows={3}
+            placeholder="A brief overview of the project goals."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out shadow-sm resize-none"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="mb-4">
+            <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+              Status
+            </label>
+            <select
+              id="status"
+              value={status}
+              onChange={(e) => setStatus(e.target.value as 'In Progress' | 'Completed' | 'Pending')}
+              className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out shadow-sm bg-white"
+            >
+              <option value="Pending">Pending</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </div>
+          <div className="mb-4">
+            <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-1">
+              Priority
+            </label>
+            <select
+              id="priority"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value as 'High' | 'Medium' | 'Low')}
+              className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out shadow-sm bg-white"
+            >
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+            </select>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-xl hover:bg-indigo-700 transition duration-200 shadow-md hover:shadow-lg disabled:opacity-50 flex items-center justify-center mt-4"
+        >
+          {loading ? (
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          ) : (
+            <Plus className="w-5 h-5 mr-2" />
+          )}
+          {loading ? 'Adding Project...' : 'Create Project'}
+        </button>
+        {message && (
+          <p className={`mt-3 text-center text-sm font-medium ${message.includes('Error') || message.includes('Failed') ? 'text-red-500' : 'text-green-600'}`}>
+            {message}
+          </p>
+        )}
+      </form>
+    </div>
+  );
+};
+
+
+// --- Main Application Component ---
+const App: React.FC = () => {
+  const [activePage, setActivePage] = useState('dashboard');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [projects, setProjects] = useState<ProjectData[]>([]);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const userId = currentUser?.uid || 'anonymous';
+  
+  // --- Firebase Authentication & Setup ---
+  useEffect(() => {
+    if (!auth || !db) {
+      console.error("Firebase services are not initialized.");
+      return;
+    }
+
+    const signIn = async () => {
+      try {
+        if (initialAuthToken) {
+          await signInWithCustomToken(auth, initialAuthToken);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Authentication failed:", error);
+      }
+    };
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setCurrentUser(user);
+      }
+      setIsAuthReady(true);
+    });
+
+    signIn();
+
+    return () => unsubscribe();
+  }, []);
+
+  // --- Firestore Realtime Data Listener ---
+  useEffect(() => {
+    if (!db || !isAuthReady) return;
+
+    // Listen to the public 'projects' collection
+    const projectsRef = collection(db, getPublicCollectionPath('projects'));
+    // Order by creation time (descending)
+    const projectsQuery = query(projectsRef, orderBy('createdAt', 'desc'));
+
+    // Setup real-time listener
+    const unsubscribeProjects = onSnapshot(projectsQuery, (snapshot) => {
+      const projectsData: ProjectData[] = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as ProjectData));
+      setProjects(projectsData);
+    }, (error) => {
+      console.error("Error fetching projects:", error);
+    });
+
+    // Cleanup listener on component unmount
+    return () => {
+      unsubscribeProjects();
+    };
+  }, [db, isAuthReady]); // Re-run when db or auth readiness changes
+
+  // Compute stats for dashboard
+  const totalProjects = projects.length;
+  const completedProjects = projects.filter(p => p.status === 'Completed').length;
+  const pendingProjects = projects.filter(p => p.status === 'Pending').length;
+  const highPriorityProjects = projects.filter(p => p.priority === 'High').length;
+
+  // --- Render Content based on activePage ---
+  const renderContent = () => {
+    if (!isAuthReady) {
+      return (
+        <div className="flex justify-center items-center h-full min-h-[400px]">
+          <div className="text-indigo-600 text-lg font-semibold flex items-center">
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Connecting to Database...
+          </div>
+        </div>
+      );
+    }
+    
+    switch (activePage) {
+      case 'dashboard':
+        return (
+          <>
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">Dashboard Overview</h1>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              <FeatureCard Icon={LayoutDashboard} title="Total Projects" value={String(totalProjects)} link="#projects" />
+              <FeatureCard Icon={CheckCircle} title="Completed" value={String(completedProjects)} link="#projects" />
+              <FeatureCard Icon={Clock} title="Pending" value={String(pendingProjects)} link="#projects" />
+              <FeatureCard Icon={ArrowUpRight} title="High Priority" value={String(highPriorityProjects)} link="#projects" />
+            </div>
+            
+            <section id="projects" className="mt-8">
+              <h2 className="text-2xl font-bold text-gray-800 mb-4">All Projects ({totalProjects})</h2>
+              <ProjectList projects={projects} userId={userId} db={db} />
+            </section>
+
+            <NewProjectForm db={db} userId={userId} />
+          </>
+        );
+      case 'settings':
+        return (
+          <>
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">Settings</h1>
+            <div className="bg-white p-8 rounded-2xl shadow-xl">
+              <h2 className="text-xl font-semibold mb-4 text-gray-700">User Information</h2>
+              <p className="text-gray-600 mb-2">
+                <span className="font-medium">Status:</span> {currentUser ? 'Authenticated' : 'Anonymous'}
+              </p>
+              <p className="text-gray-600 mb-4">
+                <span className="font-medium">Your User ID:</span> <code className="bg-gray-100 p-1 rounded-md text-sm font-mono break-all">{userId}</code>
+              </p>
+              <p className="text-sm text-gray-500">
+                This ID is used to track ownership of the projects you create. Share it if you need others to know which projects are yours.
+              </p>
+            </div>
+          </>
+        );
+      default:
+        return <div>Page Not Found</div>;
+    }
+  };
+
+  const navItems = [
+    { name: 'Dashboard', icon: Home, page: 'dashboard' },
+    { name: 'Settings', icon: Settings, page: 'settings' },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans antialiased">
+      <style>{`
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+          width: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+          background-color: #a78bfa;
+          border-radius: 10px;
+        }
+        ::-webkit-scrollbar-track {
+          background-color: #f3f4f6;
+        }
+      `}</style>
+      
+      {/* Mobile Menu Button */}
+      <button
+        className="fixed top-4 right-4 z-50 p-2 bg-indigo-600 text-white rounded-full lg:hidden shadow-lg"
+        onClick={() => setIsMenuOpen(!isMenuOpen)}
+        aria-label="Toggle navigation menu"
+      >
+        {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+      </button>
+
+      <div className="lg:flex">
+        {/* Sidebar */}
+        <aside className={`fixed inset-y-0 left-0 z-40 lg:static lg:w-64 bg-indigo-800 transition-transform duration-300 ease-in-out ${isMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} lg:flex-shrink-0 flex flex-col p-6 shadow-2xl`}>
+          <div className="flex-shrink-0 flex items-center mb-10 border-b border-indigo-700 pb-4">
+            <Link className="w-6 h-6 text-indigo-300 mr-3" />
+            <h2 className="text-2xl font-extrabold text-white">ProjectFlow</h2>
+          </div>
+          
+          <nav className="flex-1 space-y-2">
+            {navItems.map((item) => (
+              <NavItem
+                key={item.page}
+                href={`#${item.page}`}
+                onClick={() => { setActivePage(item.page); setIsMenuOpen(false); }}
+                isActive={activePage === item.page}
+              >
+                <item.icon className="w-5 h-5" />
+                <span>{item.name}</span>
+              </NavItem>
+            ))}
+          </nav>
+
+          <div className="mt-8 pt-4 border-t border-indigo-700">
+            <div className="flex items-center space-x-3 text-sm font-medium text-indigo-200">
+              <LogOut className="w-5 h-5" />
+              <span>Signed in as:</span>
+            </div>
+            <p className="text-sm text-white mt-1 font-mono break-all">{userId}</p>
+          </div>
+        </aside>
+
+        {/* Main Content Area */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-10 lg:ml-64 pt-20 lg:pt-10 transition-all duration-300 ease-in-out">
+          {renderContent()}
+        </main>
+      </div>
     </div>
   );
 };
