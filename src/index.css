@@ -1,0 +1,22 @@
+/*
+  This file is mandatory in a Tailwind setup.
+  It imports the core Tailwind layers that generate all the utility classes 
+  you use throughout your React components (like in src/App.tsx).
+*/
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global Styles (Optional but recommended for consistency)
+  Setting the default font and ensuring the app spans the full viewport.
+*/
+body {
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root, html, body {
+  height: 100%;
+  margin: 0;
+}
