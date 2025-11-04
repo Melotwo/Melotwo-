@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, User } from 'firebase/auth';
-import { getFirestore, collection, doc, onSnapshot, setDoc, query, orderBy, where, deleteDoc } from 'firebase/firestore';
+import { getFirestore, collection, doc, onSnapshot, setDoc, query, orderBy, deleteDoc } from 'firebase/firestore'; 
 import { Home, LayoutDashboard, Settings, LogOut, ArrowUpRight, Plus, Users, Menu, X, CheckCircle, Clock, ListPlus, Link } from 'lucide-react';
 
 // --- Global Variables and Configuration ---
-// These are provided by the canvas environment.
+// These variables are injected by the environment and declared in src/global.d.ts
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : '';
@@ -45,16 +45,8 @@ interface ProjectData {
   createdAt: number;
 }
 
-interface TaskData {
-  id: string;
-  projectId: string;
-  title: string;
-  isComplete: boolean;
-  createdAt: number;
-}
-
 // --- Firebase Initialization and Auth Logic (Moved to top-level for context) ---
-let app;
+let app: any;
 let db: any;
 let auth: any;
 
@@ -459,7 +451,7 @@ const App: React.FC = () => {
       return (
         <div className="flex justify-center items-center h-full min-h-[400px]">
           <div className="text-indigo-600 text-lg font-semibold flex items-center">
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
