@@ -1,15 +1,54 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
-// --- Mock Data ---
+// --- FIREBASE IMPORTS ---
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithCustomToken, 
+  onAuthStateChanged,
+  Auth,
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  addDoc, 
+  collection, 
+  Firestore,
+  // We don't use onSnapshot for the contact form, but typically use it for real-time data
+} from 'firebase/firestore';
+
+
+// --- TYPE DEFINITIONS ---
+interface Product {
+    id: number;
+    name: string;
+    category: 'Head Protection' | 'Monitoring' | 'Fall Protection' | 'Workwear';
+    image: string;
+    description: string;
+    price: number;
+    features: string[];
+}
+type ContactFormData = {
+    name: string;
+    email: string;
+    company: string;
+    inquiry: string;
+    message: string;
+};
+
+
+// --- MOCK DATA ---
 
 const NAV_ITEMS = [
   { name: 'Solutions', href: '#solutions' },
   { name: 'Products', href: '#products' },
-  { name: 'Training', href: '#training' },
   { name: 'Contact', href: '#contact' },
 ];
 
 const SOLUTIONS_DATA = [
+  // ... (unchanged)
   {
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-highlight-yellow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
@@ -40,18 +79,76 @@ const SOLUTIONS_DATA = [
   },
 ];
 
-// --- Utility Components ---
+const PRODUCT_DATA: Product[] = [
+  {
+    id: 1,
+    name: 'M40 High-Density Safety Helmet',
+    category: 'Head Protection',
+    image: 'https://placehold.co/400x300/003087/FFB81C?text=M40+HELMET',
+    description: 'Designed with reinforced ABS polymer for superior impact resistance in underground operations. Features integrated lamp clips and comfort liner.',
+    price: 45.99,
+    features: ['High-impact ABS shell', '4-point chin strap', 'Adjustable suspension'],
+  },
+  {
+    id: 2,
+    name: 'Vortex Gas Detector (Multi-Sensor)',
+    category: 'Monitoring',
+    image: 'https://placehold.co/400x300/006D77/FFFFFF?text=VORTEX+GAS',
+    description: 'Real-time simultaneous detection of CH4, CO, O2, and H2S. Intrinsically safe design suitable for hazardous zones.',
+    price: 389.00,
+    features: ['4-sensor detection', 'Intrinsically safe (IECEx)', '95dB audible alarm'],
+  },
+  {
+    id: 3,
+    name: 'Pro-Fit Fall Arrest Harness',
+    category: 'Fall Protection',
+    image: 'https://placehold.co/400x300/4A4A4A/FFB81C?text=HARNESS+KIT',
+    description: 'Lightweight, durable polyester webbing with quick-connect buckles. Ideal for vertical mobility and confined space rescue.',
+    price: 155.50,
+    features: ['5-point adjustment', 'D-ring back attachment', 'Flame-resistant material'],
+  },
+  {
+    id: 4,
+    name: 'Hi-Viz FR Reflective Vest',
+    category: 'Workwear',
+    image: 'https://placehold.co/400x300/FFB81C/003087?text=HI-VIZ+VEST',
+    description: 'High-visibility orange/yellow with premium reflective tape. Fire-resistant (FR) compliant for smelting and high-heat environments.',
+    price: 29.99,
+    features: ['Level 2 ANSI/ISEA', 'Aramid fiber stitching', 'Moisture-wicking mesh'],
+  },
+  {
+    id: 5,
+    name: 'Cut-Resistant Gloves (Level 5)',
+    category: 'Workwear',
+    image: 'https://placehold.co/400x300/003087/FFB81C?text=GLOVES',
+    description: 'Durable nitrile-coated gloves offering maximum dexterity and ISO Level 5 cut resistance for heavy machinery handling.',
+    price: 19.50,
+    features: ['Nitrile coating', 'Level 5 cut resistance', 'Oil and chemical grip'],
+  },
+  {
+    id: 6,
+    name: 'Digital Noise Dosimeter',
+    category: 'Monitoring',
+    image: 'https://placehold.co/400x300/006D77/FFFFFF?text=NOISE+METER',
+    description: 'Compact device for continuous monitoring of worker sound exposure, ensuring compliance with occupational health standards.',
+    price: 210.00,
+    features: ['Dose calculation', 'Data logging', 'Rechargeable battery'],
+  },
+];
+
+
+// --- UTILITY COMPONENTS ---
 
 // Simple Loading Spinner for the form submission
 const LoadingSpinner: React.FC = () => (
-    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-brand-blue" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-highlight-yellow" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
     </svg>
 );
 
 
-// --- Sub-Components ---
+// --- SUB-COMPONENTS ---
 
 /**
  * Navigation Bar Component
@@ -165,7 +262,7 @@ const HeroSection: React.FC = () => {
               href="#products" 
               className="px-8 py-3 text-brand-blue border-2 border-brand-blue font-semibold rounded-full hover:bg-brand-blue hover:text-white transition duration-300 transform hover:scale-105"
             >
-              Download Catalog
+              View Products
             </a>
           </div>
         </div>
@@ -226,7 +323,7 @@ const SolutionsSection: React.FC = () => {
                 href="#products" 
                 className="mt-4 inline-flex items-center text-cert-teal font-semibold hover:text-brand-blue transition"
               >
-                Learn More
+                View Products
                 <svg xmlns="http://www.w3.org/2000/svg" className="ml-1 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
               </a>
             </div>
@@ -238,10 +335,101 @@ const SolutionsSection: React.FC = () => {
 };
 
 /**
- * Contact Form Section Component
+ * Product Catalog Section
  */
-const ContactSection: React.FC = () => {
-  const [formData, setFormData] = useState({
+const ProductSection: React.FC = () => {
+    const categories = useMemo(() => Array.from(new Set(PRODUCT_DATA.map(p => p.category))), []);
+    const [selectedCategory, setSelectedCategory] = useState<string>('All');
+
+    const filteredProducts = useMemo(() => {
+        if (selectedCategory === 'All') {
+            return PRODUCT_DATA;
+        }
+        return PRODUCT_DATA.filter(p => p.category === selectedCategory);
+    }, [selectedCategory]);
+
+    const formatPrice = (price: number) => {
+        return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(price);
+    };
+
+    return (
+        <section id="products" className="py-20 bg-white">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="text-center mb-16">
+                    <h2 className="text-4xl sm:text-5xl font-extrabold text-brand-blue">
+                        Our Certified PPE & Safety Catalogue
+                    </h2>
+                    <p className="mt-4 text-xl text-steel-gray max-w-3xl mx-auto">
+                        Browse our full range of high-quality, internationally compliant products designed for harsh African conditions.
+                    </p>
+                </div>
+
+                {/* Category Filters */}
+                <div className="flex flex-wrap justify-center gap-3 mb-12">
+                    {['All', ...categories].map(category => (
+                        <button
+                            key={category}
+                            onClick={() => setSelectedCategory(category)}
+                            className={`px-5 py-2 text-sm font-semibold rounded-full transition duration-200 shadow-md ${
+                                selectedCategory === category 
+                                    ? 'bg-highlight-yellow text-brand-blue' 
+                                    : 'bg-gray-100 text-steel-gray hover:bg-gray-200'
+                            }`}
+                        >
+                            {category}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Product Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+                    {filteredProducts.map((product) => (
+                        <div 
+                            key={product.id} 
+                            className="bg-gray-50 rounded-xl overflow-hidden shadow-xl hover:shadow-2xl transition duration-300 transform hover:-translate-y-1 border border-gray-100"
+                        >
+                            <img 
+                                src={product.image} 
+                                alt={product.name} 
+                                className="w-full h-48 object-cover border-b-4 border-highlight-yellow"
+                            />
+                            <div className="p-6">
+                                <span className="text-xs font-medium text-cert-teal uppercase tracking-wider">{product.category}</span>
+                                <h3 className="mt-1 text-2xl font-bold text-brand-blue">{product.name}</h3>
+                                <p className="mt-3 text-steel-gray text-sm">{product.description}</p>
+                                
+                                <ul className="mt-4 text-sm space-y-1 text-steel-gray">
+                                    {product.features.map((feature, i) => (
+                                        <li key={i} className="flex items-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-highlight-yellow flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                                            {feature}
+                                        </li>
+                                    ))}
+                                </ul>
+
+                                <div className="mt-6 flex justify-between items-center pt-4 border-t border-gray-200">
+                                    <span className="text-3xl font-extrabold text-brand-blue">{formatPrice(product.price)}</span>
+                                    <a 
+                                        href="#contact" 
+                                        className="px-4 py-2 bg-highlight-yellow text-brand-blue text-sm font-bold rounded-full hover:bg-brand-blue hover:text-white transition"
+                                    >
+                                        Inquire
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </section>
+    );
+};
+
+/**
+ * Contact Form Section Component - Now integrated with Firestore
+ */
+const ContactSection: React.FC<{ db: Firestore | null; userId: string | null; appId: string }> = ({ db, userId, appId }) => {
+  const [formData, setFormData] = useState<ContactFormData>({
     name: '',
     email: '',
     company: '',
@@ -258,10 +446,16 @@ const ContactSection: React.FC = () => {
     setIsSubmitted(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
+    // Check if Firestore is ready
+    if (!db || !userId) {
+        setError('Database connection is not ready. Please wait a moment and try again.');
+        return;
+    }
+
     // Simple validation
     if (!formData.name || !formData.email || !formData.company || !formData.message) {
         setError('Please fill in all required fields (Name, Email, Company, Message).');
@@ -270,15 +464,29 @@ const ContactSection: React.FC = () => {
 
     setIsLoading(true);
 
-    // MOCK API CALL: Replace this with actual Firebase/backend submission
-    setTimeout(() => {
-        setIsLoading(false);
-        // Simulate a successful submission
-        console.log('Form Submitted:', formData);
+    try {
+        // Construct the collection path for private user data
+        const collectionPath = `artifacts/${appId}/users/${userId}/contact_inquiries`;
+        const inquiriesCollection = collection(db, collectionPath);
+
+        // Add the contact form data to the collection
+        await addDoc(inquiriesCollection, {
+            ...formData,
+            submittedAt: new Date().toISOString(), // Use ISO string for universal time
+            userId: userId,
+        });
+
+        console.log("Inquiry successfully saved to Firestore.");
         setIsSubmitted(true);
         // Clear form data after success
         setFormData({ name: '', email: '', company: '', inquiry: 'quote', message: '' });
-    }, 2000);
+
+    } catch (err) {
+        console.error("Error saving document to Firestore: ", err);
+        setError('Failed to submit your request. Please check your connection and try again.');
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   return (
@@ -291,6 +499,11 @@ const ContactSection: React.FC = () => {
           <p className="mt-4 text-xl text-steel-gray">
             Let's discuss how Melotwo can enhance the safety and compliance of your mining operations.
           </p>
+          {userId && (
+            <p className="mt-4 text-sm text-gray-500">
+                Your user ID is: <code className="bg-gray-200 p-1 rounded font-mono">{userId}</code>
+            </p>
+          )}
         </div>
 
         <div className="bg-gray-50 p-8 md:p-12 rounded-xl shadow-2xl border-t-8 border-highlight-yellow">
@@ -298,7 +511,7 @@ const ContactSection: React.FC = () => {
             {/* Form Feedback */}
             {isSubmitted && (
                 <div className="mb-6 p-4 bg-cert-teal/10 text-cert-teal border border-cert-teal rounded-lg font-semibold">
-                    Thank you! Your inquiry has been received. A Melotwo specialist will contact you shortly.
+                    Thank you! Your inquiry has been received and logged. A Melotwo specialist will contact you shortly.
                 </div>
             )}
             {error && (
@@ -309,7 +522,7 @@ const ContactSection: React.FC = () => {
 
             <form onSubmit={handleSubmit} className="space-y-6">
                 
-                {/* Name and Email */}
+                {/* Form Fields... (unchanged) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div>
                         <label htmlFor="name" className="block text-sm font-medium text-steel-gray mb-1">Full Name *</label>
@@ -389,7 +602,7 @@ const ContactSection: React.FC = () => {
                 {/* Submit Button */}
                 <button
                     type="submit"
-                    disabled={isLoading}
+                    disabled={isLoading || !db}
                     className="w-full flex items-center justify-center px-8 py-3 bg-brand-blue text-white font-bold rounded-full shadow-lg hover:bg-brand-blue/90 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {isLoading ? (
@@ -415,65 +628,125 @@ const ContactSection: React.FC = () => {
  * The main component that renders the entire application structure.
  */
 export const App: React.FC = () => {
-  return (
-    <div className="min-h-screen bg-white font-sans">
-      
-      <Navbar />
-      <main>
-        <HeroSection />
-        <SolutionsSection />
+    const [db, setDb] = useState<Firestore | null>(null);
+    const [auth, setAuth] = useState<Auth | null>(null);
+    const [userId, setUserId] = useState<string | null>(null);
+    const [isFirebaseLoading, setIsFirebaseLoading] = useState(true);
+
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+    // 1. Initialize Firebase and set up Auth
+    useEffect(() => {
+        if (Object.keys(firebaseConfig).length === 0) {
+            console.error("Firebase config is missing.");
+            setIsFirebaseLoading(false);
+            return;
+        }
+
+        const app = initializeApp(firebaseConfig);
+        const firestore = getFirestore(app);
+        const firebaseAuth = getAuth(app);
+
+        setDb(firestore);
+        setAuth(firebaseAuth);
+
+        // Authenticate the user
+        const authenticate = async (authInstance: Auth) => {
+            try {
+                if (initialAuthToken) {
+                    await signInWithCustomToken(authInstance, initialAuthToken);
+                } else {
+                    await signInAnonymously(authInstance);
+                }
+            } catch (error) {
+                console.error("Firebase Authentication Error:", error);
+            }
+        };
+
+        authenticate(firebaseAuth);
+
+        // Set up Auth State Listener
+        const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+            if (user) {
+                // User is signed in, get UID
+                setUserId(user.uid);
+            } else {
+                // User is signed out or anonymous
+                setUserId('anonymous-' + Date.now().toString()); // Fallback unique ID
+            }
+            setIsFirebaseLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [initialAuthToken, appId, JSON.stringify(firebaseConfig)]);
+
+    if (isFirebaseLoading) {
+        return (
+             <div className="flex justify-center items-center h-screen bg-gray-50">
+                <div className="flex items-center text-brand-blue text-lg font-semibold">
+                    <LoadingSpinner />
+                    Loading Melotwo Platform...
+                </div>
+            </div>
+        );
+    }
+
+    return (
+      <div className="min-h-screen bg-white font-sans">
         
-        {/* Placeholder for future sections like 'Products' */}
-        <section id="products" className="py-20 bg-gray-100">
-          <div className="max-w-7xl mx-auto px-4 text-center">
-            <h2 className="text-4xl font-bold text-brand-blue">View Our Full Product Catalog</h2>
-            <p className="mt-4 text-xl text-steel-gray">Detailed specifications for every piece of certified PPE.</p>
-          </div>
-        </section>
-
-        {/* New Contact Section */}
-        <ContactSection />
-
-      </main>
-
-      {/* Basic Footer */}
-      <footer className="bg-brand-blue text-gray-300 py-10 mt-12">
-        <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-8">
+        <Navbar />
+        <main>
+          <HeroSection />
+          <SolutionsSection />
           
-          <div className="space-y-2">
-            <h4 className="text-lg font-bold text-highlight-yellow">Melotwo</h4>
-            <p className="text-sm">Certified Safety Solutions for the African Mining Industry.</p>
-          </div>
+          {/* New Product Catalog Section */}
+          <ProductSection />
 
-          <div>
-            <h4 className="text-lg font-bold text-white mb-3">Quick Links</h4>
-            <ul className="space-y-2 text-sm">
-              {NAV_ITEMS.map(item => (
-                <li key={`footer-${item.name}`}>
-                  <a href={item.href} className="hover:text-highlight-yellow transition">{item.name}</a>
-                </li>
-              ))}
-            </ul>
-          </div>
-          
-          <div>
-            <h4 className="text-lg font-bold text-white mb-3">Contact</h4>
-            <p className="text-sm">sales@melotwo.com</p>
-            <p className="text-sm">+(27) 10 549 0000</p>
-          </div>
+          {/* Contact Section, now passing Firestore instances */}
+          <ContactSection db={db} userId={userId} appId={appId} />
 
-          <div className="space-y-2">
-            <h4 className="text-lg font-bold text-white mb-3">Compliance</h4>
-            <p className="text-sm">ISO 45001 Certified</p>
-            <p className="text-sm">Local Regulatory Compliant</p>
+        </main>
+
+        {/* Basic Footer */}
+        <footer className="bg-brand-blue text-gray-300 py-10 mt-12">
+          <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-8">
+            
+            <div className="space-y-2">
+              <h4 className="text-lg font-bold text-highlight-yellow">Melotwo</h4>
+              <p className="text-sm">Certified Safety Solutions for the African Mining Industry.</p>
+            </div>
+
+            <div>
+              <h4 className="text-lg font-bold text-white mb-3">Quick Links</h4>
+              <ul className="space-y-2 text-sm">
+                {NAV_ITEMS.map(item => (
+                  <li key={`footer-${item.name}`}>
+                    <a href={item.href} className="hover:text-highlight-yellow transition">{item.name}</a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            
+            <div>
+              <h4 className="text-lg font-bold text-white mb-3">Contact</h4>
+              <p className="text-sm">sales@melotwo.com</p>
+              <p className="text-sm">+(27) 10 549 0000</p>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-lg font-bold text-white mb-3">Compliance</h4>
+              <p className="text-sm">ISO 45001 Certified</p>
+              <p className="text-sm">Local Regulatory Compliant</p>
+            </div>
           </div>
-        </div>
-        <div className="text-center text-xs mt-8 border-t border-brand-blue-500 pt-4">
-            &copy; {new Date().getFullYear()} Melotwo. All rights reserved.
-        </div>
-      </footer>
-    </div>
-  );
+          <div className="text-center text-xs mt-8 border-t border-brand-blue-500 pt-4">
+              &copy; {new Date().getFullYear()} Melotwo. All rights reserved.
+          </div>
+        </footer>
+      </div>
+    );
 };
 
 export default App;
