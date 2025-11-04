@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, User } from 'firebase/auth';
+// Cleaned up the imports below to remove 'getDoc' and 'where' which were unused in this component.
 import { getFirestore, collection, doc, onSnapshot, setDoc, query, orderBy, deleteDoc } from 'firebase/firestore'; 
 import { Home, LayoutDashboard, Settings, LogOut, ArrowUpRight, Plus, Users, Menu, X, CheckCircle, Clock, ListPlus, Link } from 'lucide-react';
 
@@ -162,6 +163,7 @@ const ProjectList: React.FC<{ projects: ProjectData[]; userId: string | null; db
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+      {/* Ensure map iteration doesn't use an unused 'index' variable to fix TS6133 */}
       {sortedProjects.map((project) => (
         <div key={project.id} className="bg-white p-6 rounded-2xl shadow-xl border-l-4 border-indigo-500 hover:shadow-2xl transition duration-200">
           <div className="flex justify-between items-start mb-4">
@@ -451,7 +453,7 @@ const App: React.FC = () => {
       return (
         <div className="flex justify-center items-center h-full min-h-[400px]">
           <div className="text-indigo-600 text-lg font-semibold flex items-center">
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
@@ -494,7 +496,7 @@ const App: React.FC = () => {
                 <span className="font-medium">Your User ID:</span> <code className="bg-gray-100 p-1 rounded-md text-sm font-mono break-all">{userId}</code>
               </p>
               <p className="text-sm text-gray-500">
-                This ID is used to track ownership of the projects you create. Share it if you need others to know which projects are yours.
+                This ID is used to track ownership of the projects you create. Share it if you need others to find your projects.
               </p>
             </div>
           </>
