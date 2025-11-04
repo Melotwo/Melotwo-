@@ -1,577 +1,477 @@
-import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, User } from 'firebase/auth';
-// Cleaned up the imports below to remove 'getDoc' and 'where' which were unused in this component.
-import { getFirestore, collection, doc, onSnapshot, setDoc, query, orderBy, deleteDoc } from 'firebase/firestore'; 
-import { Home, LayoutDashboard, Settings, LogOut, ArrowUpRight, Plus, Users, Menu, X, CheckCircle, Clock, ListPlus, Link } from 'lucide-react';
+import React, { useState } from 'react';
 
-// --- Global Variables and Configuration ---
-// These variables are injected by the environment and declared in src/global.d.ts
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : '';
+// --- Mock Data ---
 
-// --- Type Definitions for Strict TypeScript ---
-interface NavItemProps {
-  href: string;
-  children: React.ReactNode;
-  onClick: () => void;
-  isActive: boolean;
-}
+const NAV_ITEMS = [
+  { name: 'Solutions', href: '#solutions' },
+  { name: 'Products', href: '#products' },
+  { name: 'Training', href: '#training' },
+  { name: 'Contact', href: '#contact' },
+];
 
-interface FeatureCardProps {
-  Icon: React.ElementType;
-  title: string;
-  value: string;
-  link: string;
-}
+const SOLUTIONS_DATA = [
+  {
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-highlight-yellow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    ),
+    title: 'Advanced Head & Face Protection',
+    description: 'High-impact helmets, respirators, and face shields designed for extreme mining conditions, protecting against debris and dust.',
+  },
+  {
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-highlight-yellow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 17a4 4 0 0 0-8 0M12 12V3M12 21h0"/></svg>
+    ),
+    title: 'Integrated Fall Arrest Systems',
+    description: 'Certified harnesses, lanyards, and anchorage points ensuring maximum safety during work at height in vertical shafts and surface operations.',
+  },
+  {
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-highlight-yellow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 0 0-7 17.07l.21.36.25.43c.3.52.88.8 1.48.8h10.12c.6 0 1.18-.28 1.48-.8l.25-.43.21-.36A10 10 0 0 0 12 2zM12 16h.01M12 12V8"/></svg>
+    ),
+    title: 'Gas & Air Quality Monitoring',
+    description: 'Real-time detection equipment for hazardous gases (Methane, CO, H2S), providing instant alerts to mitigate underground risks.',
+  },
+  {
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-highlight-yellow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="10" rx="2" ry="2"/><circle cx="12" cy="5" r="3"/><path d="M7 11V7M17 11V7"/></svg>
+    ),
+    title: 'High-Visibility Workwear',
+    description: 'Durable, flame-resistant, and reflective apparel tailored for the demanding African climate, increasing visibility in low-light areas.',
+  },
+];
 
-interface InputFieldProps {
-  id: string;
-  label: string;
-  type: 'text' | 'number' | 'email';
-  placeholder: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}
+// --- Utility Components ---
 
-interface ProjectData {
-  id: string;
-  name: string;
-  description: string;
-  dueDate: string;
-  status: 'In Progress' | 'Completed' | 'Pending';
-  priority: 'High' | 'Medium' | 'Low';
-  ownerId: string;
-  createdAt: number;
-}
-
-// --- Firebase Initialization and Auth Logic (Moved to top-level for context) ---
-let app: any;
-let db: any;
-let auth: any;
-
-try {
-  app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-  auth = getAuth(app);
-} catch (error) {
-  console.error("Firebase initialization failed:", error);
-}
-
-// --- Utility Functions ---
-
-/**
- * Creates a firestore path for public data shared across all users in this app.
- * @param collectionName The name of the collection (e.g., 'projects').
- * @returns The full Firestore path.
- */
-const getPublicCollectionPath = (collectionName: string) => {
-  return `artifacts/${appId}/public/data/${collectionName}`;
-};
-
-/**
- * Converts a Firestore timestamp or date string into a readable format.
- * @param dateString The date string (e.g., '2025-12-31').
- * @returns A formatted date string.
- */
-const formatDate = (dateString: string): string => {
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  } catch (e) {
-    return dateString; // Return original if parsing fails
-  }
-};
-
-
-// --- Component Definitions ---
-
-// Reusable Navigation Link Component
-const NavItem: React.FC<NavItemProps> = ({ href, children, onClick, isActive }) => {
-  const baseClasses = "flex items-center space-x-3 p-3 text-sm font-medium rounded-xl transition-all duration-200";
-  const activeClasses = isActive
-    ? "bg-indigo-600 text-white shadow-lg"
-    : "text-indigo-200 hover:bg-indigo-700 hover:text-white";
-
-  return (
-    <a href={href} onClick={onClick} className={`${baseClasses} ${activeClasses}`}>
-      {children}
-    </a>
-  );
-};
-
-// Reusable Input Field Component
-const InputField: React.FC<InputFieldProps> = ({ id, label, type, placeholder, value, onChange }) => (
-  <div className="mb-4">
-    <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
-      {label}
-    </label>
-    <input
-      type={type}
-      id={id}
-      placeholder={placeholder}
-      value={value}
-      onChange={onChange}
-      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out shadow-sm"
-    />
-  </div>
+// Simple Loading Spinner for the form submission
+const LoadingSpinner: React.FC = () => (
+    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-brand-blue" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
 );
 
-// Reusable Feature Card Component
-const FeatureCard: React.FC<FeatureCardProps> = ({ Icon, title, value, link }) => (
-  <div className="bg-white p-6 rounded-2xl shadow-xl transition-all duration-300 hover:shadow-2xl hover:scale-[1.02]">
-    <div className="flex items-center justify-between">
-      <Icon className="w-8 h-8 text-indigo-500" />
-      <a href={link} className="text-sm font-semibold text-indigo-500 hover:text-indigo-700 transition flex items-center">
-        View All
-        <ArrowUpRight className="w-4 h-4 ml-1" />
-      </a>
-    </div>
-    <div className="mt-4">
-      <p className="text-gray-500 text-sm">{title}</p>
-      <p className="text-3xl font-bold text-gray-900 mt-1">{value}</p>
-    </div>
-  </div>
-);
 
-// --- Main Project List/Display Component ---
-const ProjectList: React.FC<{ projects: ProjectData[]; userId: string | null; db: any }> = ({ projects, userId, db }) => {
-  
-  const handleDelete = async (projectId: string) => {
-    if (!db || !userId) return;
-    if (window.confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
-      try {
-        const docRef = doc(db, getPublicCollectionPath('projects'), projectId);
-        await deleteDoc(docRef);
-        console.log(`Project ${projectId} deleted successfully.`);
-      } catch (error) {
-        console.error("Error deleting project:", error);
-      }
-    }
-  };
+// --- Sub-Components ---
 
-  const sortedProjects = projects.sort((a, b) => b.createdAt - a.createdAt);
-
-  if (sortedProjects.length === 0) {
-    return (
-      <div className="text-center p-10 bg-white rounded-2xl shadow-lg mt-6">
-        <p className="text-gray-500 text-lg">No projects found. Use the "Add New Project" section to start!</p>
-      </div>
-    );
-  }
+/**
+ * Navigation Bar Component
+ */
+const Navbar: React.FC = () => {
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-      {/* Ensure map iteration doesn't use an unused 'index' variable to fix TS6133 */}
-      {sortedProjects.map((project) => (
-        <div key={project.id} className="bg-white p-6 rounded-2xl shadow-xl border-l-4 border-indigo-500 hover:shadow-2xl transition duration-200">
-          <div className="flex justify-between items-start mb-4">
-            <h3 className="text-xl font-semibold text-gray-800 truncate pr-2" title={project.name}>{project.name}</h3>
-            {project.ownerId === userId && (
-              <button
-                onClick={() => handleDelete(project.id)}
-                className="text-red-500 hover:text-red-700 transition duration-150 p-1 rounded-full hover:bg-red-50"
-                aria-label={`Delete project ${project.name}`}
-              >
-                <X className="w-5 h-5" />
-              </button>
-            )}
-          </div>
-          
-          <p className="text-sm text-gray-600 mb-3 line-clamp-2">{project.description}</p>
-          
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center text-gray-700">
-              <Clock className="w-4 h-4 mr-2 text-indigo-500" />
-              <span className="font-medium">Due:</span> {formatDate(project.dueDate)}
-            </div>
-            <div className="flex items-center text-gray-700">
-              <Users className="w-4 h-4 mr-2 text-indigo-500" />
-              <span className="font-medium">Owner ID:</span> <span className="text-xs ml-1 bg-gray-100 px-2 py-0.5 rounded-full font-mono">{project.ownerId}</span>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <span
-              className={`text-xs font-semibold px-3 py-1 rounded-full ${
-                project.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                project.status === 'In Progress' ? 'bg-yellow-100 text-yellow-700' :
-                'bg-blue-100 text-blue-700'
-              }`}
-            >
-              {project.status}
+    <nav className="bg-brand-blue shadow-xl sticky top-0 z-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-20">
+          {/* Logo/Brand (White text on Deep Blue) */}
+          <div className="flex-shrink-0">
+            <span className="text-3xl font-extrabold text-white tracking-tight">
+              Melotwo<span className="text-highlight-yellow text-2xl font-medium">.</span>
             </span>
-            <span
-              className={`text-xs font-semibold px-3 py-1 rounded-full ${
-                project.priority === 'High' ? 'bg-red-100 text-red-700' :
-                project.priority === 'Medium' ? 'bg-orange-100 text-orange-700' :
-                'bg-gray-100 text-gray-700'
-              }`}
-            >
-              {project.priority}
-            </span>
+            <p className="hidden md:block text-xs text-gray-300 mt-0.5">African Mining Safety</p>
           </div>
-        </div>
-      ))}
-    </div>
-  );
-};
 
-
-// --- New Project Form Component ---
-const NewProjectForm: React.FC<{ db: any; userId: string | null }> = ({ db, userId }) => {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [status, setStatus] = useState<'In Progress' | 'Completed' | 'Pending'>('Pending');
-  const [priority, setPriority] = useState<'High' | 'Medium' | 'Low'>('Medium');
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name || !dueDate || !db || !userId) {
-      setMessage('Please fill in Name and Due Date.');
-      return;
-    }
-
-    setLoading(true);
-    setMessage('');
-
-    try {
-      const projectsCollection = collection(db, getPublicCollectionPath('projects'));
-      // Using setDoc with a generated ID to create the document
-      const newDocRef = doc(projectsCollection);
-      
-      const newProject: Omit<ProjectData, 'id'> = {
-        name,
-        description,
-        dueDate,
-        status,
-        priority,
-        ownerId: userId,
-        createdAt: Date.now(),
-      };
-      
-      await setDoc(newDocRef, newProject);
-
-      setMessage(`Project "${name}" added successfully!`);
-      setName('');
-      setDescription('');
-      setDueDate('');
-      setStatus('Pending');
-      setPriority('Medium');
-    } catch (error) {
-      console.error('Error adding project:', error);
-      setMessage('Failed to add project. Check console for details.');
-    } finally {
-      setLoading(false);
-      setTimeout(() => setMessage(''), 5000);
-    }
-  };
-
-  return (
-    <div className="bg-white p-6 md:p-8 rounded-2xl shadow-xl mt-8">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
-        <ListPlus className="w-6 h-6 mr-3 text-indigo-500" />
-        Add New Project
-      </h2>
-      <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <InputField
-            id="projectName"
-            label="Project Name"
-            type="text"
-            placeholder="e.g., Q4 Marketing Campaign"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <div className="mb-4">
-            <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700 mb-1">
-              Due Date
-            </label>
-            <input
-              type="date"
-              id="dueDate"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out shadow-sm"
-            />
-          </div>
-        </div>
-        
-        <div className="mb-4">
-          <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-            Description
-          </label>
-          <textarea
-            id="description"
-            rows={3}
-            placeholder="A brief overview of the project goals."
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out shadow-sm resize-none"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="mb-4">
-            <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
-              Status
-            </label>
-            <select
-              id="status"
-              value={status}
-              onChange={(e) => setStatus(e.target.value as 'In Progress' | 'Completed' | 'Pending')}
-              className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out shadow-sm bg-white"
-            >
-              <option value="Pending">Pending</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Completed">Completed</option>
-            </select>
-          </div>
-          <div className="mb-4">
-            <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-1">
-              Priority
-            </label>
-            <select
-              id="priority"
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as 'High' | 'Medium' | 'Low')}
-              className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out shadow-sm bg-white"
-            >
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-            </select>
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-xl hover:bg-indigo-700 transition duration-200 shadow-md hover:shadow-lg disabled:opacity-50 flex items-center justify-center mt-4"
-        >
-          {loading ? (
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          ) : (
-            <Plus className="w-5 h-5 mr-2" />
-          )}
-          {loading ? 'Adding Project...' : 'Create Project'}
-        </button>
-        {message && (
-          <p className={`mt-3 text-center text-sm font-medium ${message.includes('Error') || message.includes('Failed') ? 'text-red-500' : 'text-green-600'}`}>
-            {message}
-          </p>
-        )}
-      </form>
-    </div>
-  );
-};
-
-
-// --- Main Application Component ---
-const App: React.FC = () => {
-  const [activePage, setActivePage] = useState('dashboard');
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isAuthReady, setIsAuthReady] = useState(false);
-  const [projects, setProjects] = useState<ProjectData[]>([]);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-
-  const userId = currentUser?.uid || 'anonymous';
-  
-  // --- Firebase Authentication & Setup ---
-  useEffect(() => {
-    if (!auth || !db) {
-      console.error("Firebase services are not initialized.");
-      return;
-    }
-
-    const signIn = async () => {
-      try {
-        if (initialAuthToken) {
-          await signInWithCustomToken(auth, initialAuthToken);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (error) {
-        console.error("Authentication failed:", error);
-      }
-    };
-
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setCurrentUser(user);
-      }
-      setIsAuthReady(true);
-    });
-
-    signIn();
-
-    return () => unsubscribe();
-  }, []);
-
-  // --- Firestore Realtime Data Listener ---
-  useEffect(() => {
-    if (!db || !isAuthReady) return;
-
-    // Listen to the public 'projects' collection
-    const projectsRef = collection(db, getPublicCollectionPath('projects'));
-    // Order by creation time (descending)
-    const projectsQuery = query(projectsRef, orderBy('createdAt', 'desc'));
-
-    // Setup real-time listener
-    const unsubscribeProjects = onSnapshot(projectsQuery, (snapshot) => {
-      const projectsData: ProjectData[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as ProjectData));
-      setProjects(projectsData);
-    }, (error) => {
-      console.error("Error fetching projects:", error);
-    });
-
-    // Cleanup listener on component unmount
-    return () => {
-      unsubscribeProjects();
-    };
-  }, [db, isAuthReady]); // Re-run when db or auth readiness changes
-
-  // Compute stats for dashboard
-  const totalProjects = projects.length;
-  const completedProjects = projects.filter(p => p.status === 'Completed').length;
-  const pendingProjects = projects.filter(p => p.status === 'Pending').length;
-  const highPriorityProjects = projects.filter(p => p.priority === 'High').length;
-
-  // --- Render Content based on activePage ---
-  const renderContent = () => {
-    if (!isAuthReady) {
-      return (
-        <div className="flex justify-center items-center h-full min-h-[400px]">
-          <div className="text-indigo-600 text-lg font-semibold flex items-center">
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Connecting to Database...
-          </div>
-        </div>
-      );
-    }
-    
-    switch (activePage) {
-      case 'dashboard':
-        return (
-          <>
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Dashboard Overview</h1>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              <FeatureCard Icon={LayoutDashboard} title="Total Projects" value={String(totalProjects)} link="#projects" />
-              <FeatureCard Icon={CheckCircle} title="Completed" value={String(completedProjects)} link="#projects" />
-              <FeatureCard Icon={Clock} title="Pending" value={String(pendingProjects)} link="#projects" />
-              <FeatureCard Icon={ArrowUpRight} title="High Priority" value={String(highPriorityProjects)} link="#projects" />
-            </div>
-            
-            <section id="projects" className="mt-8">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">All Projects ({totalProjects})</h2>
-              <ProjectList projects={projects} userId={userId} db={db} />
-            </section>
-
-            <NewProjectForm db={db} userId={userId} />
-          </>
-        );
-      case 'settings':
-        return (
-          <>
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Settings</h1>
-            <div className="bg-white p-8 rounded-2xl shadow-xl">
-              <h2 className="text-xl font-semibold mb-4 text-gray-700">User Information</h2>
-              <p className="text-gray-600 mb-2">
-                <span className="font-medium">Status:</span> {currentUser ? 'Authenticated' : 'Anonymous'}
-              </p>
-              <p className="text-gray-600 mb-4">
-                <span className="font-medium">Your User ID:</span> <code className="bg-gray-100 p-1 rounded-md text-sm font-mono break-all">{userId}</code>
-              </p>
-              <p className="text-sm text-gray-500">
-                This ID is used to track ownership of the projects you create. Share it if you need others to find your projects.
-              </p>
-            </div>
-          </>
-        );
-      default:
-        return <div>Page Not Found</div>;
-    }
-  };
-
-  const navItems = [
-    { name: 'Dashboard', icon: Home, page: 'dashboard' },
-    { name: 'Settings', icon: Settings, page: 'settings' },
-  ];
-
-  return (
-    <div className="min-h-screen bg-gray-50 font-sans antialiased">
-      <style>{`
-        /* Custom scrollbar for better aesthetics */
-        ::-webkit-scrollbar {
-          width: 8px;
-        }
-        ::-webkit-scrollbar-thumb {
-          background-color: #a78bfa;
-          border-radius: 10px;
-        }
-        ::-webkit-scrollbar-track {
-          background-color: #f3f4f6;
-        }
-      `}</style>
-      
-      {/* Mobile Menu Button */}
-      <button
-        className="fixed top-4 right-4 z-50 p-2 bg-indigo-600 text-white rounded-full lg:hidden shadow-lg"
-        onClick={() => setIsMenuOpen(!isMenuOpen)}
-        aria-label="Toggle navigation menu"
-      >
-        {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-      </button>
-
-      <div className="lg:flex">
-        {/* Sidebar */}
-        <aside className={`fixed inset-y-0 left-0 z-40 lg:static lg:w-64 bg-indigo-800 transition-transform duration-300 ease-in-out ${isMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} lg:flex-shrink-0 flex flex-col p-6 shadow-2xl`}>
-          <div className="flex-shrink-0 flex items-center mb-10 border-b border-indigo-700 pb-4">
-            <Link className="w-6 h-6 text-indigo-300 mr-3" />
-            <h2 className="text-2xl font-extrabold text-white">ProjectFlow</h2>
-          </div>
-          
-          <nav className="flex-1 space-y-2">
-            {navItems.map((item) => (
-              <NavItem
-                key={item.page}
-                href={`#${item.page}`}
-                onClick={() => { setActivePage(item.page); setIsMenuOpen(false); }}
-                isActive={activePage === item.page}
+          {/* Desktop Navigation Links (White text) */}
+          <div className="hidden md:flex space-x-8">
+            {NAV_ITEMS.map((item) => (
+              <a
+                key={item.name}
+                href={item.href}
+                className="text-white hover:text-highlight-yellow transition duration-150 ease-in-out font-medium py-2"
               >
-                <item.icon className="w-5 h-5" />
-                <span>{item.name}</span>
-              </NavItem>
+                {item.name}
+              </a>
             ))}
-          </nav>
-
-          <div className="mt-8 pt-4 border-t border-indigo-700">
-            <div className="flex items-center space-x-3 text-sm font-medium text-indigo-200">
-              <LogOut className="w-5 h-5" />
-              <span>Signed in as:</span>
-            </div>
-            <p className="text-sm text-white mt-1 font-mono break-all">{userId}</p>
           </div>
-        </aside>
 
-        {/* Main Content Area */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-10 lg:ml-64 pt-20 lg:pt-10 transition-all duration-300 ease-in-out">
-          {renderContent()}
-        </main>
+          {/* Action Button (Safety Yellow) */}
+          <div className="hidden md:block">
+            <a href="#contact" className="px-6 py-2 bg-highlight-yellow text-brand-blue font-semibold rounded-full hover:bg-white hover:text-brand-blue transition duration-200 shadow-lg">
+              Request Quote
+            </a>
+          </div>
+
+          {/* Mobile Menu Button (Hamburger) */}
+          <div className="flex md:hidden">
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              className="inline-flex items-center justify-center p-2 rounded-md text-white hover:text-highlight-yellow hover:bg-brand-blue-700 focus:outline-none"
+              aria-expanded={isOpen}
+            >
+              <svg className="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {isOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* Mobile Menu Content */}
+      {isOpen && (
+        <div className="md:hidden pt-2 pb-3 space-y-1 px-2 transition-all duration-300 ease-in-out bg-white border-t border-gray-100">
+          {NAV_ITEMS.map((item) => (
+            <a
+              key={item.name}
+              href={item.href}
+              onClick={() => setIsOpen(false)}
+              className="block px-3 py-2 rounded-md text-base font-medium text-steel-gray hover:bg-gray-200 hover:text-brand-blue transition"
+            >
+              {item.name}
+            </a>
+          ))}
+          <a href="#contact" className="block w-full mt-4 px-4 py-2 bg-highlight-yellow text-brand-blue text-center font-semibold rounded-lg hover:bg-brand-blue hover:text-white transition duration-200">
+            Request Quote
+          </a>
+        </div>
+      )}
+    </nav>
+  );
+};
+
+/**
+ * Hero Section Component
+ */
+const HeroSection: React.FC = () => {
+  // Placeholder image URL for safety in action
+  const placeholderImage = "https://placehold.co/1200x800/dbeafe/003087?text=Safety+Gear+for+Mining";
+
+  return (
+    <header className="bg-white py-16 sm:py-24 lg:py-32">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid md:grid-cols-2 gap-12 items-center">
+        
+        {/* Left Content (Text) */}
+        <div className="text-center md:text-left">
+          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-brand-blue leading-tight">
+            Certified Safety <br className="hidden sm:inline" /> 
+            <span className="text-highlight-yellow block sm:inline">for African Mining</span>
+          </h1>
+          <p className="mt-6 text-lg text-steel-gray max-w-xl mx-auto md:mx-0">
+            Melotwo delivers world-class, certified Protective Personal Equipment (PPE) and innovative safety solutions, tailored to the unique and demanding conditions of the African mining industry.
+          </p>
+          <div className="mt-10 flex flex-col sm:flex-row justify-center md:justify-start gap-4">
+            {/* Primary CTA: Request Quote (Safety Yellow) */}
+            <a 
+              href="#contact" 
+              className="px-8 py-3 bg-highlight-yellow text-brand-blue font-bold rounded-full shadow-lg hover:bg-brand-blue hover:text-white transition duration-300 transform hover:scale-105"
+            >
+              Request Quote
+            </a>
+            {/* Secondary CTA: Download Catalog */}
+            <a 
+              href="#products" 
+              className="px-8 py-3 text-brand-blue border-2 border-brand-blue font-semibold rounded-full hover:bg-brand-blue hover:text-white transition duration-300 transform hover:scale-105"
+            >
+              Download Catalog
+            </a>
+          </div>
+        </div>
+
+        {/* Right Content (Image/Graphic) */}
+        <div className="mt-12 md:mt-0 relative">
+          <img 
+            className="w-full h-auto rounded-xl shadow-2xl object-cover transform transition duration-500 hover:shadow-2xl hover:scale-[1.01]"
+            src={placeholderImage} 
+            alt="Safety gear for the mining industry"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.onerror = null; 
+              target.src = "https://placehold.co/1200x800/dbeafe/003087?text=Melotwo+Safety";
+            }}
+          />
+          {/* Certification Badge (Teal with white checkmark) */}
+          <div className="absolute bottom-4 left-4 bg-cert-teal text-white px-4 py-2 rounded-full text-sm font-bold shadow-xl flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+            ISO Certified & Compliant
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+};
+
+/**
+ * Solutions/Features Section Component
+ */
+const SolutionsSection: React.FC = () => {
+  return (
+    <section id="solutions" className="py-20 bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-16">
+          <h2 className="text-4xl sm:text-5xl font-extrabold text-brand-blue">
+            The Melotwo Advantage: Safety Built for Africa
+          </h2>
+          <p className="mt-4 text-xl text-steel-gray max-w-3xl mx-auto">
+            Our products meet the highest international standards while being engineered to withstand the toughest industrial and environmental demands on the continent.
+          </p>
+        </div>
+
+        {/* Features Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          {SOLUTIONS_DATA.map((solution, index) => (
+            <div 
+              key={index} 
+              className="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition duration-300 transform hover:-translate-y-1 border-t-4 border-brand-blue"
+            >
+              <div className="flex items-center justify-start gap-4">
+                {/* Product Photos: Yellow highlight on key PPE features -> represented by the icon color */}
+                {solution.icon}
+                <h3 className="text-xl font-bold text-brand-blue">{solution.title}</h3>
+              </div>
+              <p className="mt-4 text-steel-gray">{solution.description}</p>
+              <a 
+                href="#products" 
+                className="mt-4 inline-flex items-center text-cert-teal font-semibold hover:text-brand-blue transition"
+              >
+                Learn More
+                <svg xmlns="http://www.w3.org/2000/svg" className="ml-1 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+              </a>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+/**
+ * Contact Form Section Component
+ */
+const ContactSection: React.FC = () => {
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    company: '',
+    inquiry: 'quote',
+    message: '',
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setError('');
+    setIsSubmitted(false);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    
+    // Simple validation
+    if (!formData.name || !formData.email || !formData.company || !formData.message) {
+        setError('Please fill in all required fields (Name, Email, Company, Message).');
+        return;
+    }
+
+    setIsLoading(true);
+
+    // MOCK API CALL: Replace this with actual Firebase/backend submission
+    setTimeout(() => {
+        setIsLoading(false);
+        // Simulate a successful submission
+        console.log('Form Submitted:', formData);
+        setIsSubmitted(true);
+        // Clear form data after success
+        setFormData({ name: '', email: '', company: '', inquiry: 'quote', message: '' });
+    }, 2000);
+  };
+
+  return (
+    <section id="contact" className="py-20 bg-white">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-4xl sm:text-5xl font-extrabold text-brand-blue">
+            Request a Quote or Consultation
+          </h2>
+          <p className="mt-4 text-xl text-steel-gray">
+            Let's discuss how Melotwo can enhance the safety and compliance of your mining operations.
+          </p>
+        </div>
+
+        <div className="bg-gray-50 p-8 md:p-12 rounded-xl shadow-2xl border-t-8 border-highlight-yellow">
+            
+            {/* Form Feedback */}
+            {isSubmitted && (
+                <div className="mb-6 p-4 bg-cert-teal/10 text-cert-teal border border-cert-teal rounded-lg font-semibold">
+                    Thank you! Your inquiry has been received. A Melotwo specialist will contact you shortly.
+                </div>
+            )}
+            {error && (
+                <div className="mb-6 p-4 bg-red-100 text-red-700 border border-red-400 rounded-lg font-semibold">
+                    Error: {error}
+                </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+                
+                {/* Name and Email */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                        <label htmlFor="name" className="block text-sm font-medium text-steel-gray mb-1">Full Name *</label>
+                        <input
+                            type="text"
+                            name="name"
+                            id="name"
+                            value={formData.name}
+                            onChange={handleChange}
+                            required
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-brand-blue focus:border-brand-blue transition duration-150"
+                            placeholder="John Doe"
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="email" className="block text-sm font-medium text-steel-gray mb-1">Work Email *</label>
+                        <input
+                            type="email"
+                            name="email"
+                            id="email"
+                            value={formData.email}
+                            onChange={handleChange}
+                            required
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-brand-blue focus:border-brand-blue transition duration-150"
+                            placeholder="john.doe@mineco.com"
+                        />
+                    </div>
+                </div>
+
+                {/* Company and Inquiry Type */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                        <label htmlFor="company" className="block text-sm font-medium text-steel-gray mb-1">Company Name *</label>
+                        <input
+                            type="text"
+                            name="company"
+                            id="company"
+                            value={formData.company}
+                            onChange={handleChange}
+                            required
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-brand-blue focus:border-brand-blue transition duration-150"
+                            placeholder="MineCo Ltd."
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="inquiry" className="block text-sm font-medium text-steel-gray mb-1">Type of Inquiry</label>
+                        <select
+                            name="inquiry"
+                            id="inquiry"
+                            value={formData.inquiry}
+                            onChange={handleChange}
+                            className="w-full px-4 py-2 border border-gray-300 bg-white rounded-lg focus:ring-brand-blue focus:border-brand-blue transition duration-150"
+                        >
+                            <option value="quote">Request a Quote (PPE / Product)</option>
+                            <option value="consultation">Safety Consultation Service</option>
+                            <option value="partnership">Partnership / Distribution</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                </div>
+
+                {/* Message */}
+                <div>
+                    <label htmlFor="message" className="block text-sm font-medium text-steel-gray mb-1">Your Message *</label>
+                    <textarea
+                        name="message"
+                        id="message"
+                        rows={4}
+                        value={formData.message}
+                        onChange={handleChange}
+                        required
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-brand-blue focus:border-brand-blue transition duration-150"
+                        placeholder="Please tell us about your requirements, project details, or specific safety concerns..."
+                    />
+                </div>
+
+                {/* Submit Button */}
+                <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full flex items-center justify-center px-8 py-3 bg-brand-blue text-white font-bold rounded-full shadow-lg hover:bg-brand-blue/90 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {isLoading ? (
+                        <>
+                            <LoadingSpinner />
+                            Sending Inquiry...
+                        </>
+                    ) : (
+                        'Submit Request'
+                    )}
+                </button>
+            </form>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+
+// --- Main App Component ---
+
+/**
+ * The main component that renders the entire application structure.
+ */
+export const App: React.FC = () => {
+  return (
+    <div className="min-h-screen bg-white font-sans">
+      
+      <Navbar />
+      <main>
+        <HeroSection />
+        <SolutionsSection />
+        
+        {/* Placeholder for future sections like 'Products' */}
+        <section id="products" className="py-20 bg-gray-100">
+          <div className="max-w-7xl mx-auto px-4 text-center">
+            <h2 className="text-4xl font-bold text-brand-blue">View Our Full Product Catalog</h2>
+            <p className="mt-4 text-xl text-steel-gray">Detailed specifications for every piece of certified PPE.</p>
+          </div>
+        </section>
+
+        {/* New Contact Section */}
+        <ContactSection />
+
+      </main>
+
+      {/* Basic Footer */}
+      <footer className="bg-brand-blue text-gray-300 py-10 mt-12">
+        <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-8">
+          
+          <div className="space-y-2">
+            <h4 className="text-lg font-bold text-highlight-yellow">Melotwo</h4>
+            <p className="text-sm">Certified Safety Solutions for the African Mining Industry.</p>
+          </div>
+
+          <div>
+            <h4 className="text-lg font-bold text-white mb-3">Quick Links</h4>
+            <ul className="space-y-2 text-sm">
+              {NAV_ITEMS.map(item => (
+                <li key={`footer-${item.name}`}>
+                  <a href={item.href} className="hover:text-highlight-yellow transition">{item.name}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+          
+          <div>
+            <h4 className="text-lg font-bold text-white mb-3">Contact</h4>
+            <p className="text-sm">sales@melotwo.com</p>
+            <p className="text-sm">+(27) 10 549 0000</p>
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="text-lg font-bold text-white mb-3">Compliance</h4>
+            <p className="text-sm">ISO 45001 Certified</p>
+            <p className="text-sm">Local Regulatory Compliant</p>
+          </div>
+        </div>
+        <div className="text-center text-xs mt-8 border-t border-brand-blue-500 pt-4">
+            &copy; {new Date().getFullYear()} Melotwo. All rights reserved.
+        </div>
+      </footer>
     </div>
   );
 };
