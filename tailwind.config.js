@@ -11,15 +11,17 @@ export default {
       fontFamily: {
         sans: ['Inter', 'sans-serif'],
       },
-      // Define a custom color palette based on a professional/safety theme.
+      // Updated Color Palette based on user request
       colors: {
-        'primary': '#0D9488', // Teal/Cyan color for main accents (safety/trust)
-        'secondary': '#111827', // Darker color for backgrounds/text
-        'accent': '#FCD34D', // Amber/Yellow for alerts or important buttons
+        'brand-blue': '#003087',      // Deep Blue (Header Background / Primary)
+        'highlight-yellow': '#FFB81C', // Safety Yellow (CTA / Accents)
+        'steel-gray': '#4A4A4A',      // Body Text Color
+        'cert-teal': '#006D77',       // Certification Badges
+        'white': '#FFFFFF',
       },
-      // Add custom shadow for elevated look
+      // Custom shadow reflecting the brand-blue color
       boxShadow: {
-        'lg': '0 10px 15px -3px rgba(13, 148, 136, 0.1), 0 4px 6px -2px rgba(13, 148, 136, 0.05)',
+        'lg': '0 10px 15px -3px rgba(0, 48, 135, 0.1), 0 4px 6px -2px rgba(0, 48, 135, 0.05)',
       }
     },
   },
