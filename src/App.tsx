@@ -391,7 +391,8 @@ const ProductSection: React.FC = () => {
                             <img 
                                 src={product.image} 
                                 alt={product.name} 
-                                className="w-full h-48 object-cover border-b-4 border-highlight-yellow"
+                                // UPDATED: Changed h-48 to h-64 to make the product images larger.
+                                className="w-full h-64 object-cover border-b-4 border-highlight-yellow" 
                             />
                             <div className="p-6">
                                 <span className="text-xs font-medium text-cert-teal uppercase tracking-wider">{product.category}</span>
@@ -674,7 +675,7 @@ export const App: React.FC = () => {
                 setUserId(user.uid);
             } else {
                 // User is signed out or anonymous
-                setUserId('anonymous-' + Date.now().toString()); // Fallback unique ID
+                setUserId('anonymous-' + crypto.randomUUID()); // Fallback unique ID
             }
             setIsFirebaseLoading(false);
         });
