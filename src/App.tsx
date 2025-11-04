@@ -391,8 +391,8 @@ const ProductSection: React.FC = () => {
                             <img 
                                 src={product.image} 
                                 alt={product.name} 
-                                // UPDATED: Changed h-48 to h-64 to make the product images larger.
-                                className="w-full h-64 object-cover border-b-4 border-highlight-yellow" 
+                                // REVERTED: Changing from h-64 back to h-56 for a more balanced widget size.
+                                className="w-full h-56 object-cover border-b-4 border-highlight-yellow" 
                             />
                             <div className="p-6">
                                 <span className="text-xs font-medium text-cert-teal uppercase tracking-wider">{product.category}</span>
