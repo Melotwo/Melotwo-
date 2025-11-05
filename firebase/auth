@@ -1,0 +1,189 @@
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+// FIX: Timestamp was incorrectly imported from firebase/auth.
+// Auth functions stay here:
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+// Firestore functions and Timestamp come from firebase/firestore:
+import { getFirestore, collection, onSnapshot, Timestamp, doc, setDoc, query } from 'firebase/firestore';
+
+// Global variables (MUST be used)
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+// The main App component
+const App = () => {
+  const [db, setDb] = useState(null);
+  const [auth, setAuth] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // 1. Initialize Firebase and Authenticate
+  useEffect(() => {
+    if (Object.keys(firebaseConfig).length === 0) {
+        setError("Firebase configuration is missing.");
+        setLoading(false);
+        return;
+    }
+
+    try {
+      const app = initializeApp(firebaseConfig);
+      const firestore = getFirestore(app);
+      const authInstance = getAuth(app);
+
+      setDb(firestore);
+      setAuth(authInstance);
+
+      const setupAuth = async () => {
+        try {
+          if (initialAuthToken) {
+            await signInWithCustomToken(authInstance, initialAuthToken);
+          } else {
+            await signInAnonymously(authInstance);
+          }
+        } catch (e) {
+          console.error("Authentication failed:", e);
+          setError("Failed to sign in. Check console for details.");
+        }
+      };
+      
+      const unsubscribe = onAuthStateChanged(authInstance, (user) => {
+        if (user) {
+          setUserId(user.uid);
+          console.log(`User authenticated with ID: ${user.uid}`);
+        } else {
+          setUserId(crypto.randomUUID()); // Use UUID for unauthenticated user
+          console.log("Using anonymous or temporary user ID.");
+        }
+        setLoading(false);
+      });
+
+      setupAuth();
+
+      return () => unsubscribe();
+    } catch (e) {
+      console.error("Firebase Initialization Error:", e);
+      setError("Failed to initialize Firebase. Check console for details.");
+      setLoading(false);
+    }
+  }, []);
+
+  // 2. Load data from Firestore
+  useEffect(() => {
+    if (!db || !userId) return; // Wait until DB and user ID are ready
+
+    // Define the collection path (Private data path example)
+    const collectionPath = `artifacts/${appId}/users/${userId}/sampleItems`;
+    const itemsCollection = collection(db, collectionPath);
+    const itemsQuery = query(itemsCollection);
+
+    console.log("Attaching Firestore listener to:", collectionPath);
+    
+    // Listen for real-time updates
+    const unsubscribe = onSnapshot(itemsQuery, (snapshot) => {
+        const items = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        // Sort items by a property (e.g., createdAt) in memory
+        setData(items.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0)));
+        console.log(`Fetched ${items.length} items.`);
+    }, (e) => {
+        console.error("Error fetching data:", e);
+        setError("Error fetching data from Firestore.");
+    });
+
+    return () => unsubscribe();
+  }, [db, userId]);
+
+
+  // Helper function to add an item
+  const addItem = async () => {
+    if (!db || !userId) {
+        setError("Firebase not ready.");
+        return;
+    }
+
+    try {
+        const collectionPath = `artifacts/${appId}/users/${userId}/sampleItems`;
+        const itemsCollection = collection(db, collectionPath);
+        
+        // Correct use of Timestamp from firebase/firestore
+        await setDoc(doc(itemsCollection, crypto.randomUUID()), {
+            text: `New item added at ${new Date().toLocaleTimeString()}`,
+            createdAt: Timestamp.now(), 
+            completed: false,
+        });
+        
+    } catch (e) {
+        console.error("Error adding document:", e);
+        setError("Failed to add item.");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-xl font-medium text-gray-600">Loading Application...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100 p-4 sm:p-8 font-sans">
+      <script src="https://cdn.tailwindcss.com"></script>
+      <div className="max-w-4xl mx-auto">
+        <div className="bg-white shadow-xl rounded-xl p-6 sm:p-10">
+          <h1 className="text-3xl font-extrabold text-indigo-700 mb-6 border-b pb-2">
+            Firebase Import Fix Demo
+          </h1>
+          
+          <div className="mb-4 bg-indigo-50 p-4 rounded-lg text-sm text-indigo-800">
+            <p className="font-semibold">Current User ID:</p>
+            <code className="break-all">{userId || "N/A"}</code>
+          </div>
+
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+              <span className="font-semibold">Error:</span> {error}
+            </div>
+          )}
+
+          <div className="flex justify-start mb-6">
+            <button
+              onClick={addItem}
+              disabled={!db}
+              className="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-150 disabled:opacity-50"
+            >
+              Add New Item (Test Timestamp)
+            </button>
+          </div>
+
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">
+            Firestore Items ({data.length})
+          </h2>
+
+          <div className="space-y-3">
+            {data.map(item => (
+              <div key={item.id} className="p-4 bg-gray-50 border border-gray-200 rounded-lg shadow-sm flex justify-between items-center">
+                <span className={`text-gray-700 ${item.completed ? 'line-through' : ''}`}>
+                  {item.text}
+                </span>
+                <span className="text-xs text-gray-500">
+                  {item.createdAt ? new Date(item.createdAt.seconds * 1000).toLocaleDateString() : 'No Date'}
+                </span>
+              </div>
+            ))}
+            {data.length === 0 && (
+                <p className="text-gray-500 italic p-4 bg-white rounded-lg border">No items found. Click "Add New Item" to create one.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default App;
