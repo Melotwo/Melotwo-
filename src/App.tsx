@@ -20,13 +20,29 @@ interface GalleryItem {
 
 // --- Constants ---
 
+// Style options focused on technical/inspection imagery
+const STYLE_OPTIONS = [
+    { name: "High-Resolution Inspection Photo", prompt: ", professional quality, high-detail, clear visibility, 8k photo" },
+    { name: "Thermal/Infrared View", prompt: ", thermal camera view, infrared spectrum, heat map overlay, vivid colors" },
+    { name: "Low-Light Headlamp View", prompt: ", ultra-realistic underground mine, focused LED headlamp illumination, deep shadows, wet surfaces" },
+    { name: "Digital Hazard Overlay", prompt: ", digital painting, clear safety zone markers, red hazard triangles, compliance indicators" },
+];
+
 // Model and API settings
 const IMAGEN_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent';
 const API_KEY = ""; // Canvas will inject the key
 
-// System prompt for the critique (Refinement #1)
-const CRITIQUE_SYSTEM_PROMPT = "You are a professional art critic specializing in AI-generated imagery. Provide a detailed, 2-3 paragraph critique of the image, focusing on composition, lighting, style coherence, and how well the final image matches the user's creative intent (the prompt). Use an encouraging, yet honest, tone.";
+// System prompt for Mine Safety Analysis (Refocus)
+const CRITIQUE_SYSTEM_PROMPT = `
+You are a highly experienced **Mine Safety Inspector and Risk Assessment Analyst**. Your primary goal is to analyze the provided image and the associated prompt (which describes the scene) for potential hazards, non-compliance with common safety regulations (like MSHA/OSHA standards), and best practices.
+
+Provide a detailed, three-part report:
+
+1.  **Compliance & Hazards:** List all immediate and potential **hazards or non-compliant actions** visible in the image (e.g., lack of PPE, unstable ground, improper ventilation, blocked egress).
+2.  **Risk Mitigation:** Propose specific, actionable steps to **mitigate each identified risk** (e.g., "Install secondary support beams," "Enforce hard hat and visibility vest use").
+3.  **Overall Assessment:** Provide a summary rating (e.g., 'High Risk,' 'Moderate Concern,' 'Compliant') and a concise concluding recommendation.
+`;
 
 // --- Helper Functions ---
 
@@ -36,7 +52,6 @@ const exponentialBackoffFetch = async (url: string, options: RequestInit, maxRet
         try {
             const response = await fetch(url, options);
             if (!response.ok) {
-                // If it's a 4xx or 5xx, we might need to retry, or throw a specific error
                 if (response.status === 429 || response.status >= 500) {
                      throw new Error(`HTTP error! Status: ${response.status}`);
                 }
@@ -56,12 +71,12 @@ const exponentialBackoffFetch = async (url: string, options: RequestInit, maxRet
 
 // --- API Functions ---
 
-const generateImage = async (userPrompt: string, setLoading: (loading: boolean) => void, setImageUrl: (url: string) => void) => {
+const generateImage = async (fullPrompt: string, setLoading: (loading: boolean) => void, setImageUrl: (url: string) => void) => {
     setLoading(true);
     setImageUrl('');
 
     const payload = { 
-        instances: [{ prompt: userPrompt }], 
+        instances: [{ prompt: fullPrompt }], 
         parameters: { "sampleCount": 1 } 
     };
 
@@ -92,10 +107,11 @@ const generateImage = async (userPrompt: string, setLoading: (loading: boolean) 
 
 const analyzeImage = async (userPrompt: string, base64ImageData: string, setLoading: (loading: boolean) => void, setAnalysis: (analysis: string) => void) => {
     setLoading(true);
-    setAnalysis('Analyzing image with Gemini...');
+    setAnalysis('Analyzing image for safety risks with Gemini...');
 
     const promptParts = [
-        { text: `Critique the following image based on the original prompt: "${userPrompt}"` },
+        // Instruct the model to analyze the image using the defined system prompt and the context of the user's prompt.
+        { text: `Analyze the safety risks in this image. The scene described in the prompt is: "${userPrompt}"` },
         {
             inlineData: {
                 mimeType: "image/png",
@@ -138,12 +154,15 @@ const analyzeImage = async (userPrompt: string, base64ImageData: string, setLoad
 
 const App: React.FC = () => {
     const [prompt, setPrompt] = useState('');
+    // State for style selection, defaulting to the first safety-focused option
+    const [artStyle, setArtStyle] = useState(STYLE_OPTIONS[0].prompt); 
+    
     const [currentImageUrl, setCurrentImageUrl] = useState('');
     const [currentAnalysis, setCurrentAnalysis] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     
-    // Firestore State (Persistence #2)
+    // Firestore State (Persistence)
     const [db, setDb] = useState<Firestore | null>(null);
     const [auth, setAuth] = useState<Auth | null>(null);
     const [userId, setUserId] = useState<string | null>(null);
@@ -197,7 +216,7 @@ const App: React.FC = () => {
     const getGalleryCollectionPath = useCallback((uid: string) => {
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         // Private data path: /artifacts/{appId}/users/{userId}/{collectionName}
-        return `artifacts/${appId}/users/${uid}/gallery_items`;
+        return `artifacts/${appId}/users/${uid}/safety_reports`; // Renamed collection
     }, []);
 
 
@@ -215,19 +234,23 @@ const App: React.FC = () => {
                 const items: GalleryItem[] = [];
                 snapshot.forEach((doc) => {
                     const data = doc.data();
+                    
+                    // FIX: Robust check for Firestore Timestamp object
+                    const timestamp = (data.timestamp && (data.timestamp as any).toDate) ? data.timestamp as Timestamp : Timestamp.now();
+                    
                     items.push({
                         id: doc.id,
                         prompt: data.prompt,
                         imageUrl: data.imageUrl,
                         analysis: data.analysis,
-                        timestamp: data.timestamp || Timestamp.now(), // Fallback for old data
+                        timestamp: timestamp, 
                     });
                 });
                 // Sort by timestamp descending (newest first)
                 items.sort((a, b) => b.timestamp.toDate().getTime() - a.timestamp.toDate().getTime());
                 setGalleryItems(items);
             }, (error) => {
-                console.error("Error fetching gallery items:", error);
+                console.error("Error fetching safety reports:", error);
             });
 
             // Cleanup function
@@ -268,19 +291,23 @@ const App: React.FC = () => {
 
     const handleGenerate = async () => {
         if (!prompt.trim()) {
-            alert('Please enter a prompt!');
+            alert('Please enter a description of the safety scene!');
             return;
         }
 
         setCurrentImageUrl('');
         setCurrentAnalysis('');
+        
+        // Combine user prompt with selected style for the full prompt
+        const fullPrompt = prompt.trim() + artStyle + ", in an underground mine environment, safety inspection, focused on hazards";
 
-        await generateImage(prompt, setIsGenerating, async (url) => {
+        await generateImage(fullPrompt, setIsGenerating, async (url) => {
             setCurrentImageUrl(url);
             
             // Once image is generated, immediately trigger analysis
             const base64Data = url.split(',')[1];
-            await analyzeImage(prompt, base64Data, setIsAnalyzing, setCurrentAnalysis);
+            // Use the full prompt for the critique, so the inspector knows the scene intent
+            await analyzeImage(fullPrompt, base64Data, setIsAnalyzing, setCurrentAnalysis);
         });
     };
 
@@ -291,13 +318,13 @@ const App: React.FC = () => {
 
     const renderGallery = () => (
         <div className="gallery-section">
-            <h2 className="gallery-title">Gallery ({galleryItems.length})</h2>
-            <p className="user-id">User ID: <span className="font-mono text-xs text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded">{userId || 'Loading...'}</span></p>
+            <h2 className="gallery-title">Saved Safety Reports ({galleryItems.length})</h2>
+            <p className="user-id">User ID: <span className="font-mono text-xs text-red-700 bg-red-100 px-2 py-0.5 rounded">{userId || 'Loading...'}</span></p>
 
             <div className="gallery-grid">
                 {galleryItems.length === 0 ? (
                     <p className="text-gray-500 italic text-center col-span-1 md:col-span-2 py-8">
-                        Your saved creations will appear here in real-time.
+                        Your saved safety inspection reports will appear here.
                     </p>
                 ) : (
                     galleryItems.map((item) => (
@@ -306,8 +333,8 @@ const App: React.FC = () => {
                             <div className="gallery-content">
                                 <p className="gallery-prompt-text font-semibold truncate">{item.prompt}</p>
                                 <details className="gallery-details">
-                                    <summary className="gallery-summary">View Critique</summary>
-                                    <p className="gallery-analysis-text">{item.analysis}</p>
+                                    <summary className="gallery-summary">View Full Safety Report</summary>
+                                    <p className="gallery-analysis-text whitespace-pre-wrap">{item.analysis}</p>
                                     <small className="text-gray-400">
                                         Saved: {item.timestamp.toDate().toLocaleDateString()}
                                     </small>
@@ -324,17 +351,37 @@ const App: React.FC = () => {
     return (
         <div id="app-container">
             <header className="header">
-                <h1>AI Art Critic</h1>
-                <p>Generate an image and get a professional critique from the Gemini model.</p>
+                <h1>AI Safety Inspector</h1>
+                <p>Generate a mine site scene using a technical style and get a professional safety inspection report from the Gemini model.</p>
+                <p className="text-red-600 font-semibold mt-2">Note: This application simulates a safety inspection for demonstration purposes and should not be used for real-world compliance.</p>
             </header>
 
             <div id="main-layout">
                 {/* --- Left Column: Generator --- */}
                 <div className="generation-area">
                     <div className="input-card">
+                        
+                        {/* Style Selector: Now focused on technical imagery */}
+                        <div className="style-selector-group">
+                            <label htmlFor="art-style" className="style-label">Select Imaging Style:</label>
+                            <select
+                                id="art-style"
+                                className="style-select"
+                                value={artStyle}
+                                onChange={(e) => setArtStyle(e.target.value)}
+                                disabled={isGenerating || isAnalyzing}
+                            >
+                                {STYLE_OPTIONS.map(option => (
+                                    <option key={option.name} value={option.prompt}>
+                                        {option.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        
                         <textarea
                             className="prompt-input"
-                            placeholder="Enter your artistic vision here (e.g., 'A cyberpunk street scene with neon rain and a flying car, highly detailed 8k')."
+                            placeholder="Describe the mine scene to inspect (e.g., 'A poorly supported mine face with a worker operating heavy machinery without a helmet')."
                             rows={4}
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
@@ -345,24 +392,24 @@ const App: React.FC = () => {
                             onClick={handleGenerate} 
                             disabled={!isReady || !prompt.trim()}
                         >
-                            {isGenerating ? 'Generating Image...' : (isAnalyzing ? 'Analyzing Image...' : 'Generate & Critique')}
+                            {isGenerating ? 'Generating Scene...' : (isAnalyzing ? 'Analyzing Risks...' : 'Generate Scene & Inspect')}
                         </button>
                     </div>
 
                     <div className="output-card">
-                        <h2>Visual Artifact</h2>
+                        <h2>Scene Visualization</h2>
                         <div className="image-container">
                             {isGenerating && (
                                 <div className="loading-overlay">
                                     <div className="spinner"></div>
-                                    <p>Generating...</p>
+                                    <p>Generating Scene...</p>
                                 </div>
                             )}
                             {currentImageUrl ? (
-                                <img src={currentImageUrl} alt="Generated Art" className="generated-image" />
+                                <img src={currentImageUrl} alt="Generated Safety Scene" className="generated-image" />
                             ) : (
                                 <div className="placeholder">
-                                    Your generated art will appear here.
+                                    The visualized mine scene will appear here for inspection.
                                 </div>
                             )}
                         </div>
@@ -377,24 +424,24 @@ const App: React.FC = () => {
                                     <path d="M5.5 10a.5.5 0 01.5-.5h4a.5.5 0 010 1H6a.5.5 0 01-.5-.5z" />
                                     <path fillRule="evenodd" d="M3 3.5A1.5 1.5 0 014.5 2h11A1.5 1.5 0 0117 3.5v13a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 013 16.5v-13zm1.5-.5a.5.5 0 00-.5.5v13a.5.5 0 00.5.5h11a.5.5 0 00.5-.5v-13a.5.5 0 00-.5-.5h-11zM10 13a.5.5 0 01.5-.5h2a.5.5 0 010 1h-2a.5.5 0 01-.5-.5z" clipRule="evenodd" />
                                 </svg>
-                                Save to Gallery
+                                Save Safety Report
                             </button>
-                            <p className="text-sm font-medium text-indigo-600 transition-opacity duration-300">
+                            <p className="text-sm font-medium text-red-600 transition-opacity duration-300">
                                 {saveMessage}
                             </p>
                         </div>
                     </div>
                     
                     <div className="output-card analysis-card">
-                        <h2>Art Critique</h2>
+                        <h2>Mine Safety Report</h2>
                         {isAnalyzing && (
-                            <div className="flex items-center space-x-2 text-indigo-500">
+                            <div className="flex items-center space-x-2 text-red-500">
                                 <div className="spinner-small"></div>
-                                <p className="italic">Running professional critique...</p>
+                                <p className="italic">Running risk analysis and report generation...</p>
                             </div>
                         )}
                         {!currentImageUrl && !isGenerating && !isAnalyzing ? (
-                             <p className="text-gray-500 italic">Generate an image to receive a critique here.</p>
+                             <p className="text-gray-500 italic">Generate a scene to receive a detailed safety report here.</p>
                         ) : (
                              <p className="analysis-text whitespace-pre-wrap">{currentAnalysis || 'Awaiting analysis...'}</p>
                         )}
@@ -405,24 +452,22 @@ const App: React.FC = () => {
                 {renderGallery()}
             </div>
 
-            {/* Always display User ID for debug/sharing */}
-            {/* The ID is now moved inside the gallery section */}
         </div>
     );
 };
 
-// --- Pure CSS Styling (Tweak #3) ---
+// --- Pure CSS Styling ---
 
 const style = document.createElement('style');
 style.innerHTML = `
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
 
     :root {
-        --primary-color: #4f46e5; /* Indigo 600 */
-        --primary-light: #818cf8; /* Indigo 400 */
-        --bg-color: #f8fafc; /* Slate 50 */
+        --primary-color: #ef4444; /* Red 500 for safety focus */
+        --primary-light: #f87171; /* Red 400 */
+        --bg-color: #fef2f2; /* Red 50 */
         --card-bg: #ffffff;
-        --border-color: #e5e7eb; /* Gray 200 */
+        --border-color: #fee2e2; /* Red 100 */
     }
 
     #app-container {
@@ -444,9 +489,9 @@ style.innerHTML = `
     }
     .header p {
         font-size: 1rem;
-        color: #64748b; /* Slate 500 */
+        color: #4b5563; /* Gray 600 */
     }
-
+    
     /* Main Layout for Responsiveness */
     #main-layout {
         display: flex;
@@ -478,12 +523,47 @@ style.innerHTML = `
         padding: 1.5rem;
         border: 1px solid var(--border-color);
     }
+    
+    /* Style Selector Group */
+    .style-selector-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .style-label {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    .style-select {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #d1d5db;
+        border-radius: 0.5rem;
+        background-color: white;
+        transition: border-color 0.2s;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23ef4444'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd' /%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        background-size: 1.5em 1.5em;
+    }
+
+    .style-select:focus {
+        border-color: var(--primary-color);
+        outline: none;
+        box-shadow: 0 0 0 1px var(--primary-color);
+    }
+
 
     /* Input Area */
     .prompt-input {
         width: 100%;
         padding: 0.75rem;
-        border: 1px solid #d1d5db; /* Gray 300 */
+        border: 1px solid #d1d5db;
         border-radius: 0.5rem;
         margin-bottom: 1rem;
         resize: none;
@@ -505,7 +585,7 @@ style.innerHTML = `
         transition: background-color 0.2s, opacity 0.2s;
     }
     .generate-button:hover:not(:disabled) {
-        background-color: #4338ca; /* Indigo 700 */
+        background-color: #dc2626; /* Red 600 */
     }
     .generate-button:disabled {
         opacity: 0.6;
@@ -517,14 +597,14 @@ style.innerHTML = `
         font-size: 1.25rem;
         font-weight: 700;
         margin-bottom: 1rem;
-        color: #1f2937; /* Gray 800 */
+        color: #1f2937;
     }
 
     .image-container {
         position: relative;
         width: 100%;
         aspect-ratio: 1 / 1;
-        background-color: #f3f4f6; /* Gray 100 */
+        background-color: #f3f4f6;
         border-radius: 0.5rem;
         overflow: hidden;
         border: 1px dashed var(--primary-light);
@@ -541,17 +621,18 @@ style.innerHTML = `
         align-items: center;
         justify-content: center;
         height: 100%;
-        color: #9ca3af; /* Gray 400 */
+        color: #9ca3af;
         font-style: italic;
     }
 
     .analysis-card {
-        min-height: 150px;
+        min-height: 200px;
     }
 
     .analysis-text {
         line-height: 1.6;
-        color: #374151; /* Gray 700 */
+        color: #374151;
+        white-space: pre-wrap; /* Ensure report formatting is respected */
     }
     
     .save-button {
@@ -565,16 +646,16 @@ style.innerHTML = `
         transition: background-color 0.2s;
     }
     .save-button:hover:not(.disabled) {
-        background-color: #059669; /* Emerald 600 */
+        background-color: #059669;
     }
     .save-button.disabled {
         opacity: 0.6;
         cursor: not-allowed;
-        background-color: #6b7280; /* Gray 500 */
+        background-color: #6b7280;
     }
 
 
-    /* --- Gallery Section (Persistence #2) --- */
+    /* --- Gallery Section (Persistence) --- */
 
     .gallery-section {
         flex: 1;
@@ -595,7 +676,7 @@ style.innerHTML = `
     
     .user-id {
         margin-bottom: 1rem;
-        color: #4b5563; /* Gray 600 */
+        color: #4b5563;
         font-size: 0.875rem;
     }
     
