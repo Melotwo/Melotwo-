@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, Auth, User } from 'firebase/auth';
-import { getFirestore, collection, addDoc, onSnapshot, query, Firestore, Timestamp, doc } from 'firebase/firestore';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, Auth, Firestore, Timestamp } from 'firebase/auth';
+import { getFirestore, collection, addDoc, onSnapshot, query } from 'firebase/firestore';
 
 // Define global variables expected from the environment
 declare const __app_id: string;
 declare const __firebase_config: string;
 declare const __initial_auth_token: string;
 
-// --- Interfaces ---
+// --- Constants & Types ---
+
+type Page = 'home' | 'solutions' | 'inspector';
 
 interface GalleryItem {
     id: string;
@@ -18,9 +20,6 @@ interface GalleryItem {
     timestamp: Timestamp;
 }
 
-// --- Constants ---
-
-// Style options focused on technical/inspection imagery
 const STYLE_OPTIONS = [
     { name: "High-Resolution Inspection Photo", prompt: ", professional quality, high-detail, clear visibility, 8k photo" },
     { name: "Thermal/Infrared View", prompt: ", thermal camera view, infrared spectrum, heat map overlay, vivid colors" },
@@ -28,12 +27,10 @@ const STYLE_OPTIONS = [
     { name: "Digital Hazard Overlay", prompt: ", digital painting, clear safety zone markers, red hazard triangles, compliance indicators" },
 ];
 
-// Model and API settings
 const IMAGEN_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent';
-const API_KEY = ""; // Canvas will inject the key
+const API_KEY = ""; 
 
-// System prompt for Mine Safety Analysis (Refocus)
 const CRITIQUE_SYSTEM_PROMPT = `
 You are a highly experienced **Mine Safety Inspector and Risk Assessment Analyst**. Your primary goal is to analyze the provided image and the associated prompt (which describes the scene) for potential hazards, non-compliance with common safety regulations (like MSHA/OSHA standards), and best practices.
 
@@ -44,7 +41,7 @@ Provide a detailed, three-part report:
 3.  **Overall Assessment:** Provide a summary rating (e.g., 'High Risk,' 'Moderate Concern,' 'Compliant') and a concise concluding recommendation.
 `;
 
-// --- Helper Functions ---
+// --- Utility Functions ---
 
 const exponentialBackoffFetch = async (url: string, options: RequestInit, maxRetries = 5) => {
     let lastError: Error | unknown = new Error("Initial fetch failed.");
@@ -110,7 +107,6 @@ const analyzeImage = async (userPrompt: string, base64ImageData: string, setLoad
     setAnalysis('Analyzing image for safety risks with Gemini...');
 
     const promptParts = [
-        // Instruct the model to analyze the image using the defined system prompt and the context of the user's prompt.
         { text: `Analyze the safety risks in this image. The scene described in the prompt is: "${userPrompt}"` },
         {
             inlineData: {
@@ -149,76 +145,23 @@ const analyzeImage = async (userPrompt: string, base64ImageData: string, setLoad
     }
 };
 
+// --- AI Safety Inspector Component (Internal) ---
 
-// --- React Component ---
+interface AISafetyInspectorProps {
+    db: Firestore | null;
+    userId: string | null;
+    getGalleryCollectionPath: (uid: string) => string;
+}
 
-const App: React.FC = () => {
+const AISafetyInspector: React.FC<AISafetyInspectorProps> = ({ db, userId, getGalleryCollectionPath }) => {
     const [prompt, setPrompt] = useState('');
-    // State for style selection, defaulting to the first safety-focused option
     const [artStyle, setArtStyle] = useState(STYLE_OPTIONS[0].prompt); 
-    
     const [currentImageUrl, setCurrentImageUrl] = useState('');
     const [currentAnalysis, setCurrentAnalysis] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
-    
-    // Firestore State (Persistence)
-    const [db, setDb] = useState<Firestore | null>(null);
-    const [auth, setAuth] = useState<Auth | null>(null);
-    const [userId, setUserId] = useState<string | null>(null);
     const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
     const [saveMessage, setSaveMessage] = useState('');
-
-
-    // --- Firebase Initialization and Auth ---
-
-    useEffect(() => {
-        // Retrieve global variables
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        let firebaseConfig = {};
-        if (typeof __firebase_config !== 'undefined') {
-            try {
-                firebaseConfig = JSON.parse(__firebase_config);
-            } catch (e) {
-                console.error("Failed to parse __firebase_config:", e);
-            }
-        }
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
-
-        const app = initializeApp(firebaseConfig);
-        const firestore = getFirestore(app);
-        const authentication = getAuth(app);
-
-        setDb(firestore);
-        setAuth(authentication);
-
-        const unsubscribe = onAuthStateChanged(authentication, async (user) => {
-            if (!user) {
-                try {
-                    // Sign in using custom token or anonymously
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(authentication, initialAuthToken);
-                    } else {
-                        await signInAnonymously(authentication);
-                    }
-                } catch (error) {
-                    console.error("Firebase Auth Error:", error);
-                }
-            }
-            // Once auth state is set, use the UID or a random ID
-            setUserId(authentication.currentUser?.uid || crypto.randomUUID());
-        });
-
-        return () => unsubscribe();
-    }, []);
-    
-    // Utility function to get collection path
-    const getGalleryCollectionPath = useCallback((uid: string) => {
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        // Private data path: /artifacts/{appId}/users/{userId}/{collectionName}
-        return `artifacts/${appId}/users/${uid}/safety_reports`; // Renamed collection
-    }, []);
-
 
     // --- Firestore Data Listener (Gallery) ---
     
@@ -226,16 +169,12 @@ const App: React.FC = () => {
         if (db && userId) {
             const collectionPath = getGalleryCollectionPath(userId);
             const galleryCollection = collection(db, collectionPath);
-            
-            // Listen for real-time updates
             const q = query(galleryCollection);
 
             const unsubscribe = onSnapshot(q, (snapshot) => {
                 const items: GalleryItem[] = [];
                 snapshot.forEach((doc) => {
                     const data = doc.data();
-                    
-                    // FIX: Robust check for Firestore Timestamp object
                     const timestamp = (data.timestamp && (data.timestamp as any).toDate) ? data.timestamp as Timestamp : Timestamp.now();
                     
                     items.push({
@@ -246,24 +185,20 @@ const App: React.FC = () => {
                         timestamp: timestamp, 
                     });
                 });
-                // Sort by timestamp descending (newest first)
                 items.sort((a, b) => b.timestamp.toDate().getTime() - a.timestamp.toDate().getTime());
                 setGalleryItems(items);
             }, (error) => {
                 console.error("Error fetching safety reports:", error);
             });
 
-            // Cleanup function
             return () => unsubscribe();
         }
     }, [db, userId, getGalleryCollectionPath]);
-
 
     // --- Save Artifact Function ---
 
     const saveArtifact = async () => {
         if (!db || !userId || !currentImageUrl || !currentAnalysis) {
-            console.error("Cannot save: DB not ready or data missing.");
             setSaveMessage('Error: Image or analysis missing.');
             return;
         }
@@ -272,7 +207,7 @@ const App: React.FC = () => {
         try {
             const collectionPath = getGalleryCollectionPath(userId);
             await addDoc(collection(db, collectionPath), {
-                prompt: prompt, // Use the prompt that generated the image
+                prompt: prompt,
                 imageUrl: currentImageUrl,
                 analysis: currentAnalysis,
                 timestamp: Timestamp.now(),
@@ -286,7 +221,6 @@ const App: React.FC = () => {
         }
     };
 
-
     // --- Main Generation Handler ---
 
     const handleGenerate = async () => {
@@ -298,23 +232,17 @@ const App: React.FC = () => {
         setCurrentImageUrl('');
         setCurrentAnalysis('');
         
-        // Combine user prompt with selected style for the full prompt
         const fullPrompt = prompt.trim() + artStyle + ", in an underground mine environment, safety inspection, focused on hazards";
 
         await generateImage(fullPrompt, setIsGenerating, async (url) => {
             setCurrentImageUrl(url);
             
-            // Once image is generated, immediately trigger analysis
             const base64Data = url.split(',')[1];
-            // Use the full prompt for the critique, so the inspector knows the scene intent
             await analyzeImage(fullPrompt, base64Data, setIsAnalyzing, setCurrentAnalysis);
         });
     };
 
     const isReady = !isGenerating && !isAnalyzing;
-
-
-    // --- Render Functions ---
 
     const renderGallery = () => (
         <div className="gallery-section">
@@ -346,22 +274,18 @@ const App: React.FC = () => {
             </div>
         </div>
     );
-    
 
     return (
-        <div id="app-container">
-            <header className="header">
-                <h1>AI Safety Inspector</h1>
-                <p>Generate a mine site scene using a technical style and get a professional safety inspection report from the Gemini model.</p>
-                <p className="text-red-600 font-semibold mt-2">Note: This application simulates a safety inspection for demonstration purposes and should not be used for real-world compliance.</p>
+        <div className="flex flex-col gap-8">
+            <header className="text-center pb-4 border-b border-gray-200">
+                <h1 className="text-4xl font-extrabold text-melotwo-blue">AI Safety Inspector Tool</h1>
+                <p className="text-xl text-gray-600 mt-2">Simulate, inspect, and mitigate mining risks.</p>
+                <p className="text-red-600 font-semibold mt-4 text-sm">Disclaimer: This application simulates a safety inspection for demonstration purposes and should not be used for real-world compliance.</p>
             </header>
-
-            <div id="main-layout">
-                {/* --- Left Column: Generator --- */}
-                <div className="generation-area">
+            <div className="flex flex-col lg:flex-row gap-6 max-w-7xl mx-auto w-full">
+                {/* --- Left Column: Generator & Analysis --- */}
+                <div className="flex-1 flex flex-col gap-6">
                     <div className="input-card">
-                        
-                        {/* Style Selector: Now focused on technical imagery */}
                         <div className="style-selector-group">
                             <label htmlFor="art-style" className="style-label">Select Imaging Style:</label>
                             <select
@@ -449,82 +373,470 @@ const App: React.FC = () => {
                 </div>
 
                 {/* --- Right Column: Gallery --- */}
-                {renderGallery()}
+                <div className="lg:w-1/3 w-full">
+                    {renderGallery()}
+                </div>
             </div>
-
         </div>
     );
 };
 
-// --- Pure CSS Styling ---
+
+// --- Melotwo Main Website Component ---
+
+const App: React.FC = () => {
+    const [currentPage, setCurrentPage] = useState<Page>('home');
+    
+    // Firebase State
+    const [db, setDb] = useState<Firestore | null>(null);
+    const [auth, setAuth] = useState<Auth | null>(null);
+    const [userId, setUserId] = useState<string | null>(null);
+    const [email, setEmail] = useState('');
+    const [klaviyoStatus, setKlaviyoStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+
+    // --- Firebase Initialization and Auth ---
+
+    useEffect(() => {
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        let firebaseConfig = {};
+        if (typeof __firebase_config !== 'undefined') {
+            try {
+                firebaseConfig = JSON.parse(__firebase_config);
+            } catch (e) {
+                console.error("Failed to parse __firebase_config:", e);
+            }
+        }
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
+
+        const app = initializeApp(firebaseConfig);
+        const firestore = getFirestore(app);
+        const authentication = getAuth(app);
+
+        setDb(firestore);
+        setAuth(authentication);
+
+        const unsubscribe = onAuthStateChanged(authentication, async (user) => {
+            if (!user) {
+                try {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(authentication, initialAuthToken);
+                    } else {
+                        await signInAnonymously(authentication);
+                    }
+                } catch (error) {
+                    console.error("Firebase Auth Error:", error);
+                }
+            }
+            setUserId(authentication.currentUser?.uid || crypto.randomUUID());
+        });
+
+        return () => unsubscribe();
+    }, []);
+    
+    // Utility function to get collection path (passed to inspector component)
+    const getGalleryCollectionPath = useCallback((uid: string) => {
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        return `artifacts/${appId}/users/${uid}/safety_reports`;
+    }, []);
+
+    // --- Klaviyo Mock Integration ---
+
+    const handleKlaviyoSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!email || klaviyoStatus === 'loading') return;
+
+        setKlaviyoStatus('loading');
+        console.log(`[MOCK] Attempting to capture email: ${email} for Klaviyo integration.`);
+
+        // --- MOCK API CALL START ---
+        await new Promise(resolve => setTimeout(resolve, 1500)); 
+        const mockSuccess = true; // Always succeed in the mock environment
+
+        if (mockSuccess) {
+            setKlaviyoStatus('success');
+            setEmail('');
+        } else {
+            setKlaviyoStatus('error');
+        }
+        // --- MOCK API CALL END ---
+        
+        setTimeout(() => setKlaviyoStatus('idle'), 5000);
+    };
+
+    // --- Render Functions ---
+
+    const renderPageContent = () => {
+        if (currentPage === 'inspector') {
+            return (
+                <AISafetyInspector 
+                    db={db} 
+                    userId={userId} 
+                    getGalleryCollectionPath={getGalleryCollectionPath} 
+                />
+            );
+        }
+
+        if (currentPage === 'solutions') {
+            return (
+                <div className="solutions-page-content">
+                    <h2 className="text-4xl font-bold text-melotwo-blue mb-8">Certified Safety Solutions for African Mining</h2>
+                    <p className="text-xl text-gray-700 max-w-4xl mx-auto mb-12">
+                        Melotwo partners with global leaders to bring certified, durable, and regionally-tested safety solutions directly to your operations. Compliance is our foundation.
+                    </p>
+
+                    <div className="grid md:grid-cols-3 gap-8 text-center">
+                        <div className="solution-card">
+                            <div className="icon-circle bg-red-100 text-red-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><path fillRule="evenodd" d="M11.96 2.277a.814.814 0 011.08 0l2.768 2.188a3.978 3.978 0 002.164.737l3.417.361a.81.81 0 01.761.855 7.152 7.152 0 01-.219 1.487c-.173.4-.33.748-.484 1.053a20.873 20.873 0 01-1.464 2.452 24.212 24.212 0 01-2.404 2.617 21.306 21.306 0 01-2.909 2.76c-.66.56-1.332 1.092-2.022 1.587a.81.81 0 01-.986 0c-.69-.495-1.362-1.027-2.022-1.587a21.306 21.306 0 01-2.909-2.76 24.212 24.212 0 01-2.404-2.617 20.873 20.873 0 01-1.464-2.452c-.154-.305-.311-.653-.484-1.053a7.152 7.152 0 01-.219-1.487.81.81 0 01.761-.855l3.417-.361a3.978 3.978 0 002.164-.737l2.767-2.188a.814.814 0 011.08 0z" clipRule="evenodd" /></svg>
+                            </div>
+                            <h3 className="text-xl font-semibold text-gray-900 mb-2">Ground Support Systems</h3>
+                            <p className="text-gray-600">Certified rock bolts, mesh, and specialized spray applications designed for unstable rock faces across African geology.</p>
+                        </div>
+                        <div className="solution-card">
+                            <div className="icon-circle bg-yellow-100 text-yellow-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><path d="M12 2.25a.75.75 0 01.75.75v.51a.75.75 0 01-1.5 0v-.51A.75.75 0 0112 2.25zM12 18a.75.75 0 01.75.75v.51a.75.75 0 01-1.5 0v-.51A.75.75 0 0112 18zM19.03 5.47a.75.75 0 010 1.06l-.51.51a.75.75 0 11-1.06-1.06l.51-.51a.75.75 0 011.06 0zM5.47 19.03a.75.75 0 010-1.06l.51-.51a.75.75 0 111.06 1.06l-.51.51a.75.75 0 01-1.06 0zM17.47 17.47a.75.75 0 010 1.06l-.51.51a.75.75 0 11-1.06-1.06l.51-.51a.75.75 0 011.06 0zM5.47 5.47a.75.75 0 010 1.06l-.51.51a.75.75 0 01-1.06-1.06l.51-.51a.75.75 0 011.06 0zM2.97 12a.75.75 0 01.75-.75h.51a.75.75 0 010 1.5h-.51a.75.75 0 01-.75-.75zM18 12a.75.75 0 01.75-.75h.51a.75.75 0 010 1.5h-.51a.75.75 0 01-.75-.75z" /><path fillRule="evenodd" d="M12 5.25a6.75 6.75 0 100 13.5 6.75 6.75 0 000-13.5zM12 11.25a.75.75 0 100 1.5.75.75 0 000-1.5z" clipRule="evenodd" /></svg>
+                            </div>
+                            <h3 className="text-xl font-semibold text-gray-900 mb-2">Ventilation & Air Quality</h3>
+                            <p className="text-gray-600">Advanced air monitoring and filtration systems crucial for deep-level mines, ensuring clean and compliant breathing air.</p>
+                        </div>
+                        <div className="solution-card">
+                            <div className="icon-circle bg-blue-100 text-melotwo-blue">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><path d="M7.8 7.5a.75.75 0 00-1.5 0v.5a.75.75 0 001.5 0v-.5z" /><path fillRule="evenodd" d="M8.379 7.749A3.375 3.375 0 0012 9.75a3.375 3.375 0 003.621-2.001A.75.75 0 0116.5 7.5h1.875a.75.75 0 01.624 1.229l-1.071 1.07a8.25 8.25 0 01-5.467 4.091.25.25 0 00-.24 0 8.25 8.25 0 01-5.467-4.091l-1.07-1.07A.75.75 0 014.125 7.5H6a.75.75 0 000 1.5H4.875l.487.488a6.75 6.75 0 004.887 3.303.75.75 0 010 1.499c-2.31.258-4.593.57-6.848.916a.75.75 0 00-.03 1.498l19.563-.002a.75.75 0 00.03-1.498c-2.255-.345-4.538-.657-6.848-.916a.75.75 0 010-1.499 6.75 6.75 0 004.887-3.303l.488-.488H18a.75.75 0 000-1.5h-1.875a.75.75 0 01-.621-1.229z" clipRule="evenodd" /></svg>
+                            </div>
+                            <h3 className="text-xl font-semibold text-gray-900 mb-2">Specialized PPE</h3>
+                            <p className="text-gray-600">High-visibility, fire-resistant, and ergonomically designed Personal Protective Equipment tailored for harsh underground conditions.</p>
+                        </div>
+                    </div>
+
+                    <div className="partner-section mt-16 pt-12 border-t border-gray-200">
+                        <h3 className="text-2xl font-bold text-melotwo-blue mb-6">Certified Partners & Affiliates</h3>
+                        <div className="flex flex-wrap justify-center gap-6">
+                            <a href="#" className="affiliate-link">Global Safety Tech</a>
+                            <a href="#" className="affiliate-link">African Mining Compliance</a>
+                            <a href="#" className="affiliate-link">GeoStructure Tools</a>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="home-page-content">
+                <section className="hero-section">
+                    <div className="max-w-4xl mx-auto text-center">
+                        <h1 className="text-5xl md:text-6xl font-extrabold text-white leading-tight">
+                            Certified Safety Solutions for African Mining
+                        </h1>
+                        <p className="mt-6 text-xl text-red-100 font-light max-w-2xl mx-auto">
+                            Melotwo is your trusted partner in compliance and risk mitigation, delivering world-class safety technology across the African continent.
+                        </p>
+                        <button 
+                            className="cta-button mt-8"
+                            onClick={() => setCurrentPage('solutions')}
+                        >
+                            Explore Our Certified Solutions
+                        </button>
+                    </div>
+                </section>
+                
+                <section className="feature-section">
+                    <h2 className="text-3xl font-bold text-melotwo-blue mb-4">Empowering Safety with AI</h2>
+                    <p className="text-lg text-gray-700 max-w-3xl mx-auto mb-10">
+                        Harness the power of machine learning to proactively identify hazards before they lead to incidents.
+                    </p>
+                    <div className="grid md:grid-cols-3 gap-8 text-center">
+                        <div className="feature-card">
+                            <h3 className="text-xl font-semibold text-gray-900 mb-3">AI Risk Modeling</h3>
+                            <p className="text-gray-600">Generate and analyze virtual mine scenarios to train teams on hazard recognition and rapid response.</p>
+                        </div>
+                        <div className="feature-card">
+                            <h3 className="text-xl font-semibold text-gray-900 mb-3">Compliance Audits</h3>
+                            <p className="text-gray-600">Rapidly cross-reference site conditions against MSHA, OSHA, and local regulations.</p>
+                        </div>
+                        <div className="feature-card">
+                            <h3 className="text-xl font-semibold text-gray-900 mb-3">Mitigation Planning</h3>
+                            <p className="text-gray-600">Receive actionable, step-by-step guidance on implementing best-practice safety measures.</p>
+                        </div>
+                    </div>
+                    <div className="text-center mt-10">
+                        <button 
+                            className="secondary-button"
+                            onClick={() => setCurrentPage('inspector')}
+                        >
+                            Try the AI Safety Inspector Now
+                        </button>
+                    </div>
+                </section>
+            </div>
+        );
+    };
+
+    return (
+        <div id="app-container">
+            {/* --- Navigation Bar --- */}
+            <nav className="nav-bar">
+                <div className="max-w-7xl mx-auto flex justify-between items-center h-16 px-4 sm:px-6 lg:px-8">
+                    <div className="flex items-center">
+                        <span className="text-2xl font-bold text-white tracking-widest">MELOTWO</span>
+                    </div>
+                    <div className="flex space-x-6">
+                        <a href="#" className={`nav-link ${currentPage === 'home' ? 'active' : ''}`} onClick={() => setCurrentPage('home')}>Home</a>
+                        <a href="#" className={`nav-link ${currentPage === 'solutions' ? 'active' : ''}`} onClick={() => setCurrentPage('solutions')}>Solutions</a>
+                        <a href="#" className={`nav-link ${currentPage === 'inspector' ? 'active' : ''}`} onClick={() => setCurrentPage('inspector')}>AI Inspector</a>
+                    </div>
+                </div>
+            </nav>
+
+            {/* --- Main Content Area --- */}
+            <main className="main-content">
+                {renderPageContent()}
+            </main>
+
+            {/* --- Footer & Klaviyo Email Capture --- */}
+            <footer className="footer">
+                <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 px-4 sm:px-6 lg:px-8">
+                    <div className="md:col-span-2">
+                        <h3 className="text-xl font-bold text-white mb-4">MELOTWO</h3>
+                        <p className="text-gray-300 text-sm">Dedicated to raising the bar for mine safety and compliance across the African continent.</p>
+                        <p className="mt-4 text-gray-400 text-xs">© {new Date().getFullYear()} Melotwo. All rights reserved.</p>
+                    </div>
+                    
+                    {/* Affiliate Link Section (for visibility) */}
+                    <div>
+                        <h3 className="text-lg font-semibold text-white mb-4">Quick Links</h3>
+                        <ul className="space-y-2">
+                            <li><a href="#" className="footer-link">Certified Solutions</a></li>
+                            <li><a href="#" className="footer-link">Partner Portal (Affiliate)</a></li>
+                            <li><a href="#" className="footer-link">Career Opportunities</a></li>
+                        </ul>
+                    </div>
+
+                    {/* Email Capture Section (Klaviyo Integration) */}
+                    <div>
+                        <h3 className="text-lg font-semibold text-white mb-4">Stay Compliant</h3>
+                        <p className="text-sm text-gray-300 mb-3">Sign up for our safety bulletins and updates.</p>
+                        <form onSubmit={handleKlaviyoSubmit} className="flex flex-col space-y-2">
+                            <input
+                                type="email"
+                                placeholder="Enter your email"
+                                className="email-input"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
+                                disabled={klaviyoStatus === 'loading'}
+                            />
+                            <button
+                                type="submit"
+                                className="subscribe-button"
+                                disabled={klaviyoStatus === 'loading'}
+                            >
+                                {klaviyoStatus === 'loading' ? 'Subscribing...' : 'Subscribe'}
+                            </button>
+                        </form>
+                        {klaviyoStatus === 'success' && <p className="text-green-400 text-sm mt-2">Subscription successful! (Klaviyo Mock)</p>}
+                        {klaviyoStatus === 'error' && <p className="text-red-400 text-sm mt-2">Subscription failed. Please try again.</p>}
+                    </div>
+                </div>
+            </footer>
+        </div>
+    );
+};
+
+// --- Pure CSS Styling for Melotwo Site ---
 
 const style = document.createElement('style');
 style.innerHTML = `
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
 
     :root {
-        --primary-color: #ef4444; /* Red 500 for safety focus */
-        --primary-light: #f87171; /* Red 400 */
-        --bg-color: #fef2f2; /* Red 50 */
-        --card-bg: #ffffff;
-        --border-color: #fee2e2; /* Red 100 */
+        --melotwo-blue: #1e3a8a; /* Dark Blue - Corporate */
+        --melotwo-red: #ef4444; /* Safety Red - Accent */
+        --bg-light: #f9fafb; /* Light Gray */
+        --text-color: #1f2937; /* Dark Gray */
     }
 
     #app-container {
         font-family: 'Inter', sans-serif;
-        background-color: var(--bg-color);
         min-height: 100vh;
-        padding: 1rem;
-    }
-
-    .header {
-        text-align: center;
-        padding: 1rem 0 2rem;
-        color: var(--primary-color);
-    }
-    .header h1 {
-        font-size: 2.25rem;
-        font-weight: 800;
-        margin-bottom: 0.5rem;
-    }
-    .header p {
-        font-size: 1rem;
-        color: #4b5563; /* Gray 600 */
+        background-color: var(--bg-light);
     }
     
-    /* Main Layout for Responsiveness */
-    #main-layout {
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
+    /* --- Navigation Bar --- */
+    .nav-bar {
+        background-color: var(--melotwo-blue);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        position: sticky;
+        top: 0;
+        z-index: 50;
+    }
+    .nav-link {
+        color: rgba(255, 255, 255, 0.7);
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.5rem;
+        transition: color 0.2s, background-color 0.2s;
+        font-weight: 500;
+    }
+    .nav-link:hover {
+        color: white;
+    }
+    .nav-link.active {
+        color: white;
+        background-color: rgba(255, 255, 255, 0.1);
+        font-weight: 600;
+    }
+
+    /* --- Main Content --- */
+    .main-content {
+        min-height: calc(100vh - 4rem - 18rem); /* viewport - nav - footer */
+        padding: 2rem 0;
+    }
+    
+    .home-page-content, .solutions-page-content {
         max-width: 1400px;
         margin: 0 auto;
+        padding: 0 1rem;
+    }
+    .solutions-page-content {
+        text-align: center;
+        padding: 4rem 1rem;
     }
 
-    @media (min-width: 1024px) {
-        #main-layout {
-            flex-direction: row;
-            align-items: flex-start;
-        }
+    /* Hero Section */
+    .hero-section {
+        background-color: var(--melotwo-blue);
+        padding: 6rem 1rem 8rem;
+        border-radius: 0 0 1rem 1rem;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+        margin-bottom: 4rem;
+    }
+    
+    /* CTA Button */
+    .cta-button {
+        background-color: var(--melotwo-red);
+        color: white;
+        padding: 0.75rem 2rem;
+        border-radius: 9999px;
+        font-weight: 700;
+        transition: background-color 0.2s, transform 0.1s;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+    }
+    .cta-button:hover {
+        background-color: #dc2626; /* Red 600 */
+        transform: translateY(-1px);
     }
 
-    .generation-area {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
+    /* Feature Section */
+    .feature-section {
+        padding: 3rem 1rem;
+        text-align: center;
+    }
+    .feature-card {
+        background-color: white;
+        padding: 1.5rem;
+        border-radius: 0.75rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        border: 1px solid #f3f4f6;
+        transition: transform 0.2s;
+    }
+    .feature-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
+    .secondary-button {
+        background-color: transparent;
+        color: var(--melotwo-blue);
+        border: 2px solid var(--melotwo-blue);
+        padding: 0.75rem 2rem;
+        border-radius: 9999px;
+        font-weight: 600;
+        transition: background-color 0.2s, color 0.2s;
+    }
+    .secondary-button:hover {
+        background-color: var(--melotwo-blue);
+        color: white;
+    }
+    
+    /* Solutions Section */
+    .solution-card {
+        background-color: white;
+        padding: 2rem;
+        border-radius: 0.75rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        border-top: 4px solid var(--melotwo-red);
+        transition: box-shadow 0.2s;
+    }
+    .icon-circle {
+        width: 3.5rem;
+        height: 3.5rem;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1rem;
+    }
+    .affiliate-link {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.5rem;
+        color: #4b5563;
+        font-weight: 500;
+        transition: background-color 0.2s;
+    }
+    .affiliate-link:hover {
+        background-color: #f3f4f6;
+        border-color: #d1d5db;
     }
 
-    /* Cards */
+    /* --- Footer --- */
+    .footer {
+        background-color: var(--melotwo-blue);
+        padding: 3rem 0;
+        color: white;
+        margin-top: 2rem;
+    }
+    .footer-link {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.9rem;
+        transition: color 0.2s;
+    }
+    .footer-link:hover {
+        color: white;
+        text-decoration: underline;
+    }
+    .email-input {
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.375rem;
+        border: none;
+        width: 100%;
+        color: var(--text-color);
+    }
+    .subscribe-button {
+        background-color: var(--melotwo-red);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 0.375rem;
+        font-weight: 600;
+        transition: background-color 0.2s;
+    }
+    .subscribe-button:hover:not(:disabled) {
+        background-color: #dc2626;
+    }
+    .subscribe-button:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+    
+    /* --- AI Inspector Tool Styles (Reused from previous app) --- */
+    
     .input-card, .output-card, .gallery-item {
-        background-color: var(--card-bg);
+        background-color: white;
         border-radius: 0.75rem;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
         padding: 1.5rem;
-        border: 1px solid var(--border-color);
+        border: 1px solid #e5e7eb;
     }
     
-    /* Style Selector Group */
     .style-selector-group {
         display: flex;
         flex-direction: column;
@@ -535,7 +847,7 @@ style.innerHTML = `
     .style-label {
         font-size: 0.875rem;
         font-weight: 600;
-        color: #374151;
+        color: var(--text-color);
     }
 
     .style-select {
@@ -552,14 +864,6 @@ style.innerHTML = `
         background-size: 1.5em 1.5em;
     }
 
-    .style-select:focus {
-        border-color: var(--primary-color);
-        outline: none;
-        box-shadow: 0 0 0 1px var(--primary-color);
-    }
-
-
-    /* Input Area */
     .prompt-input {
         width: 100%;
         padding: 0.75rem;
@@ -569,35 +873,29 @@ style.innerHTML = `
         resize: none;
         transition: border-color 0.2s;
     }
-    .prompt-input:focus {
-        border-color: var(--primary-color);
-        outline: none;
-        box-shadow: 0 0 0 1px var(--primary-color);
-    }
 
     .generate-button {
         width: 100%;
         padding: 0.75rem;
-        background-color: var(--primary-color);
+        background-color: var(--melotwo-blue);
         color: white;
         font-weight: 600;
         border-radius: 0.5rem;
         transition: background-color 0.2s, opacity 0.2s;
     }
     .generate-button:hover:not(:disabled) {
-        background-color: #dc2626; /* Red 600 */
+        background-color: #1a3278;
     }
     .generate-button:disabled {
         opacity: 0.6;
         cursor: not-allowed;
     }
     
-    /* Output Area */
     .output-card h2 {
         font-size: 1.25rem;
         font-weight: 700;
         margin-bottom: 1rem;
-        color: #1f2937;
+        color: var(--text-color);
     }
 
     .image-container {
@@ -607,7 +905,7 @@ style.innerHTML = `
         background-color: #f3f4f6;
         border-radius: 0.5rem;
         overflow: hidden;
-        border: 1px dashed var(--primary-light);
+        border: 1px dashed var(--melotwo-red);
     }
 
     .generated-image {
@@ -632,7 +930,7 @@ style.innerHTML = `
     .analysis-text {
         line-height: 1.6;
         color: #374151;
-        white-space: pre-wrap; /* Ensure report formatting is respected */
+        white-space: pre-wrap;
     }
     
     .save-button {
@@ -654,30 +952,11 @@ style.innerHTML = `
         background-color: #6b7280;
     }
 
-
-    /* --- Gallery Section (Persistence) --- */
-
-    .gallery-section {
-        flex: 1;
-    }
-    
-    @media (min-width: 1024px) {
-        .gallery-section {
-            flex: 1;
-        }
-    }
-
     .gallery-title {
-        font-size: 1.75rem;
+        font-size: 1.5rem;
         font-weight: 800;
         margin-bottom: 0.5rem;
-        color: var(--primary-color);
-    }
-    
-    .user-id {
-        margin-bottom: 1rem;
-        color: #4b5563;
-        font-size: 0.875rem;
+        color: var(--melotwo-blue);
     }
     
     .gallery-grid {
@@ -703,46 +982,14 @@ style.innerHTML = `
         transform: translateY(-2px);
         box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
     }
-
-    .gallery-image {
-        width: 100%;
-        aspect-ratio: 1 / 1;
-        object-fit: cover;
-        border-radius: 0.375rem;
-        margin-bottom: 0.75rem;
-    }
-    
-    .gallery-content {
-        flex-grow: 1;
-    }
-
-    .gallery-prompt-text {
-        font-size: 0.9rem;
-        color: #1f2937;
-    }
-    
-    .gallery-details {
-        margin-top: 0.5rem;
-        padding-top: 0.5rem;
-        border-top: 1px solid #f3f4f6;
-    }
     
     .gallery-summary {
         font-weight: 500;
         cursor: pointer;
-        color: var(--primary-color);
+        color: var(--melotwo-red);
     }
     
-    .gallery-analysis-text {
-        margin-top: 0.5rem;
-        font-size: 0.8rem;
-        color: #4b5563;
-        line-height: 1.4;
-    }
-
-
-    /* --- Loading Spinners --- */
-
+    /* Loading Spinners */
     .loading-overlay {
         position: absolute;
         top: 0;
@@ -755,13 +1002,13 @@ style.innerHTML = `
         justify-content: center;
         background: rgba(255, 255, 255, 0.9);
         z-index: 10;
-        color: var(--primary-color);
+        color: var(--melotwo-blue);
         font-weight: 600;
     }
 
     .spinner, .spinner-small {
         border: 4px solid rgba(0, 0, 0, 0.1);
-        border-left-color: var(--primary-color);
+        border-left-color: var(--melotwo-blue);
         border-radius: 50%;
         animation: spin 1s linear infinite;
         margin-bottom: 0.5rem;
