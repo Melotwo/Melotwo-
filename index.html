@@ -17,6 +17,14 @@
         },
       }
     </script>
+    <script>
+      // Prevent flash of wrong theme
+      if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+      }
+    </script>
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
     <style>
       :root { font-family: 'Inter', sans-serif; }
@@ -24,7 +32,8 @@
         :root { font-family: 'Inter var', sans-serif; }
       }
     </style>
-  </head>
+
+</head>
   <body class="bg-slate-50 dark:bg-slate-900 transition-colors duration-200">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
