@@ -1,6 +1,6 @@
 # Melotwo PPE Procurement Hub
 
-Melotwo Official Website repository for Melotwo, featuring certified safety solutions for the African mining industry. This site features an AI assistant powered by Google Gemini to answer safety questions and find SABS-certified products.
+Melotwo Official Website repository for Melotwo, featuring certified safety solutions for the African mining industry. This site features an AI assistant powered by Gemini to answer safety questions and find SABS-certified products.
 
 ## 🛠 Technology Stack
 - **Framework:** React (Vite)
@@ -23,7 +23,7 @@ For the automated deployment to work, you must set up secrets in your GitHub rep
 1. Go to your GitHub Repository -> **Settings** -> **Secrets and variables** -> **Actions**.
 2. Add the following **Repository secrets**:
    - `API_KEY`: Your Google Gemini API Key. (Required for the build process).
-   - `FIREBASE_SERVICE_ACCOUNT_MELOTWO_PPE_HUB`: The service account JSON content.
+   - `FIREBASE_SERVICE_ACCOUNT`: The service account JSON content.
      - *Note: You can generate this by running `firebase init hosting:github` locally, or by creating a Service Account in Google Cloud Console with "Firebase Hosting Admin" permissions and downloading the JSON key.*
 
 ### 3. Manual Deployment (Optional)
