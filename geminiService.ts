@@ -1,7 +1,6 @@
+
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import type { Source } from '../types';
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 interface AiBotResponse {
   text: string;
@@ -17,6 +16,9 @@ const systemInstruction = `You are an expert assistant for Melotwo, a leading pr
 
 export const getAiBotResponse = async (prompt: string, location: Geolocation | null): Promise<AiBotResponse> => {
   try {
+    // Initialize the client inside the function to ensure it uses the current environment and prevents stale instances.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
     const config: any = {
         tools: [{ googleSearch: {} }, { googleMaps: {} }],
         systemInstruction: systemInstruction,
@@ -56,19 +58,6 @@ export const getAiBotResponse = async (prompt: string, location: Geolocation | n
                     title: String(chunk.maps.title || 'View on Google Maps'), 
                     uri: String(chunk.maps.uri) 
                 });
-            }
-            const placeSources = chunk.maps.placeAnswerSources;
-            if (placeSources) {
-                const reviewSnippets = placeSources.reviewSnippets || [];
-                for (const snippet of reviewSnippets) {
-                    // FIX: The `place` property does not exist on the review snippet. Access `uri` and `title` directly.
-                    if (snippet?.uri) {
-                        sources.push({ 
-                            title: String(snippet.title || 'Review details'), 
-                            uri: String(snippet.uri) 
-                        });
-                    }
-                }
             }
         }
     }
